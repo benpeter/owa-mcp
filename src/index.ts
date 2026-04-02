@@ -7,10 +7,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { TokenManager } from './auth.js';
 import { CalendarClient } from './calendar.js';
+import { MailClient } from './mail.js';
 import type { OwaCreateEventPayload, OwaUpdateEventPayload, RsvpAction, OwaRsvpPayload } from './types.js';
 
 const tokenManager = new TokenManager();
 const calendarClient = new CalendarClient(tokenManager);
+const mailClient = new MailClient(tokenManager);
 
 const server = new McpServer({
   name: 'owa-mcp',
@@ -218,6 +220,90 @@ server.tool(
   async ({ eventId, comment, timezone }) => {
     const event = await calendarClient.followEvent(eventId, comment, timezone);
     return { content: [{ type: 'text', text: JSON.stringify(event, null, 2) }] };
+  }
+);
+
+server.tool(
+  'list_mail_folders',
+  'List all mail folders in the mailbox, or child folders of a specific folder.',
+  {
+    parentFolderId: z.string().optional()
+      .describe('List children of this folder. If omitted, lists top-level folders.'),
+  },
+  async ({ parentFolderId }) => {
+    const folders = await mailClient.listFolders(parentFolderId);
+    return { content: [{ type: 'text', text: JSON.stringify(folders, null, 2) }] };
+  }
+);
+
+server.tool(
+  'get_emails',
+  'Get emails from a specific mailbox folder with optional filtering.',
+  {
+    folderId: z.string().optional().default('Inbox')
+      .describe('Folder ID or well-known name (Inbox, Drafts, SentItems, DeletedItems). Default: Inbox'),
+    filter: z.enum(['all', 'unread', 'flagged', 'today', 'this_week']).optional().default('all')
+      .describe('Filter preset'),
+    limit: z.number().int().min(1).max(500).optional().default(20)
+      .describe('Maximum number of emails to return (default 20, max 500)'),
+    pageToken: z.string().optional()
+      .describe('Pagination token from previous response'),
+  },
+  async ({ folderId, filter, limit, pageToken }) => {
+    const result = await mailClient.getMessages(folderId, { filter, limit, pageToken });
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  'search_emails',
+  'Search emails using full-text query OR structured filters (mutually exclusive). Use query for natural search, or structured filters for precise field matching.',
+  {
+    query: z.string().optional()
+      .describe('Full-text search query (uses Exchange search index). Cannot be combined with structured filters.'),
+    from: z.string().optional()
+      .describe('Filter by sender email address'),
+    subject: z.string().optional()
+      .describe('Filter by subject (contains match)'),
+    receivedAfter: z.string().optional()
+      .describe('ISO 8601 datetime — only messages received after this time'),
+    receivedBefore: z.string().optional()
+      .describe('ISO 8601 datetime — only messages received before this time'),
+    folderId: z.string().optional()
+      .describe('Scope search to a specific folder'),
+    limit: z.number().int().min(1).max(500).optional().default(20)
+      .describe('Maximum results (default 20, max 500)'),
+  },
+  async (params) => {
+    const result = await mailClient.searchMessages(params);
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  'get_email',
+  'Read a single email with full body content and attachment metadata.',
+  {
+    messageId: z.string().describe('Message ID from get_emails or search_emails'),
+    format: z.enum(['text', 'html']).optional().default('text')
+      .describe('Body format: "text" (default) or "html"'),
+  },
+  async ({ messageId, format }) => {
+    const message = await mailClient.getMessage(messageId, format);
+    return { content: [{ type: 'text', text: JSON.stringify(message, null, 2) }] };
+  }
+);
+
+server.tool(
+  'get_attachment',
+  'Download an email attachment to disk. Returns the file path.',
+  {
+    messageId: z.string().describe('Message ID'),
+    attachmentId: z.string().describe('Attachment ID from get_email response'),
+  },
+  async ({ messageId, attachmentId }) => {
+    const result = await mailClient.getAttachment(messageId, attachmentId);
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
   }
 );
 
