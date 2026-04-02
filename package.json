@@ -1,0 +1,31 @@
+{
+  "name": "owa-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Microsoft Outlook calendar via Playwright Edge session interception",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "owa-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts --out-dir dist",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.0",
+    "playwright": "^1.51.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.0",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
