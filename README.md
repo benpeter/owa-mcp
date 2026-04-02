@@ -1,6 +1,6 @@
 # owa-mcp
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that gives Claude Code read access to your Microsoft Outlook calendar — **without requiring an Azure app registration**.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that gives Claude Code full access to your Microsoft Outlook calendar — **without requiring an Azure app registration**.
 
 ## How it works
 
@@ -45,7 +45,7 @@ Add to `~/.claude/settings.json`:
 }
 ```
 
-Restart Claude Code. You should now have a `get_calendar_events` tool available.
+Restart Claude Code. You should now have calendar tools available.
 
 ## Available Tools
 
@@ -55,12 +55,87 @@ Returns calendar events in a time range.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `startDateTime` | string | yes | ISO 8601 start, e.g. `2026-04-07T00:00:00Z` |
-| `endDateTime` | string | yes | ISO 8601 end, e.g. `2026-04-14T00:00:00Z` |
-| `maxResults` | number | no | Max events to return (default 50, max 100) |
-| `timezone` | string | no | IANA timezone, e.g. `Europe/Berlin` (default UTC) |
+| `startDateTime` | string | yes | ISO 8601 start |
+| `endDateTime` | string | yes | ISO 8601 end |
+| `maxResults` | number | no | Max events (default 50, max 100) |
+| `timezone` | string | no | IANA timezone (default UTC) |
 
-Example prompt: *"What meetings do I have next week?"*
+### `create_calendar_event`
+
+Create a new event. Adding attendees auto-sends invitations.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `subject` | string | yes | Event title |
+| `startDateTime` | string | yes | Local datetime without offset |
+| `endDateTime` | string | yes | Local datetime without offset |
+| `timezone` | string | no | Windows timezone name (default "W. Europe Standard Time") |
+| `body` | string | no | Event description |
+| `location` | string | no | Location name |
+| `attendees` | array | no | `[{ email, name?, type? }]` — sends invitations |
+| `isAllDay` | boolean | no | All-day event |
+| `showAs` | string | no | Free, Tentative, Busy, Oof, WorkingElsewhere |
+| `isOnlineMeeting` | boolean | no | Create as Teams meeting |
+
+### `update_calendar_event`
+
+Update fields on an existing event. Only include fields to change.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `eventId` | string | yes | Event ID |
+| `subject` | string | no | New title |
+| `startDateTime` | string | no | New start time |
+| `endDateTime` | string | no | New end time |
+| `timezone` | string | no | Timezone for start/end |
+| `body` | string | no | New body (caution: overwrites Teams join link) |
+| `location` | string | no | New location |
+| `showAs` | string | no | New show-as status |
+
+### `cancel_calendar_event`
+
+Cancel a meeting you organized. Sends cancellation with reason to attendees.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `eventId` | string | yes | Event ID |
+| `reason` | string | no | Cancellation reason sent to attendees |
+
+### `delete_calendar_event`
+
+Remove an event from your calendar silently (no notification sent).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `eventId` | string | yes | Event ID |
+
+### `respond_to_calendar_event`
+
+RSVP to a meeting: accept, tentatively accept, or decline.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `eventId` | string | yes | Event ID |
+| `response` | string | yes | `accept`, `tentative`, or `decline` |
+| `comment` | string | no | Message to organizer |
+| `sendResponse` | boolean | no | Notify organizer (default true) |
+| `proposedStartDateTime` | string | no | Propose alternative start (tentative/decline only) |
+| `proposedEndDateTime` | string | no | Propose alternative end |
+
+### `follow_calendar_event`
+
+Track an event on your calendar without RSVPing. Shows as Free, organizer not notified.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `eventId` | string | yes | Event ID |
+| `timezone` | string | no | Timezone for returned event |
+
+Example prompts:
+- *"What meetings do I have next week?"*
+- *"Create a 30-minute meeting with Jane tomorrow at 2pm"*
+- *"Decline the ECCN sync with a note that I'm on vacation"*
+- *"Follow the Analytics Tech Call so I can see it on my calendar"*
 
 ## Troubleshooting
 
@@ -75,9 +150,12 @@ This shouldn't happen normally. If it does, check that no other Playwright proce
 
 ## Roadmap
 
-- [ ] `create_calendar_event`
-- [ ] `update_calendar_event`
-- [ ] `delete_calendar_event`
+- [x] `create_calendar_event`
+- [x] `update_calendar_event`
+- [x] `cancel_calendar_event` (with reason)
+- [x] `respond_to_calendar_event` (accept / tentative / decline)
+- [x] `follow_calendar_event`
+- [x] `delete_calendar_event`
 - [ ] `get_emails` (Mail.ReadWrite scope is already present in the token)
 - [ ] `send_email`
 
