@@ -11,6 +11,7 @@ import type {
 } from './types.js';
 
 const OWA_BASE = 'https://outlook.office.com/api/v2.0';
+const OWA_SVC = 'https://outlook.office.com/owa/service.svc';
 
 export interface GetCalendarEventsOptions {
   maxResults?: number;          // default 50
@@ -88,15 +89,63 @@ export class CalendarClient {
     await this.request('POST', `/me/events/${eventId}/${action}`, { body: payload });
   }
 
-  async followEvent(eventId: string, timezone?: string): Promise<CalendarEvent> {
-    await this.request('POST', `/me/events/${eventId}/tentativelyaccept`, {
-      body: { SendResponse: false },
+  /**
+   * Follow a calendar event using OWA's native Follow protocol.
+   * Sends a "Following" notification to the organizer. The event appears
+   * on the user's calendar with ShowAs=Free and subject prefixed "Following:".
+   * Uses the OWA service.svc internal API with Attendance=3, Mode=3.
+   */
+  async followEvent(eventId: string, comment?: string, timezone?: string): Promise<CalendarEvent> {
+    const token = await this.tokens.getToken();
+    const payload = {
+      __type: 'RespondToCalendarEventJsonRequest:#Exchange',
+      Header: {
+        __type: 'JsonRequestHeaders:#Exchange',
+        RequestServerVersion: 'V2018_01_08',
+        TimeZoneContext: {
+          __type: 'TimeZoneContext:#Exchange',
+          TimeZoneDefinition: {
+            __type: 'TimeZoneDefinitionType:#Exchange',
+            Id: timezone ?? 'W. Europe Standard Time',
+          },
+        },
+      },
+      Body: {
+        __type: 'RespondToCalendarEventRequest:#Exchange',
+        EventId: { __type: 'ItemId:#Exchange', Id: eventId },
+        Response: 'Tentative',
+        SendResponse: true,
+        Notes: {
+          __type: 'BodyContentType:#Exchange',
+          BodyType: 'HTML',
+          Value: comment ? `<div>${comment}</div>` : '<div><br></div>',
+        },
+        ProposedStartTime: '',
+        ProposedEndTime: '',
+        Attendance: 3,
+        Mode: 3,
+      },
+    };
+
+    const res = await fetch(`${OWA_SVC}?action=RespondToCalendarEvent`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token.value}`,
+        'Content-Type': 'application/json; charset=utf-8',
+        action: 'RespondToCalendarEvent',
+        'x-owa-urlpostdata': encodeURIComponent(JSON.stringify(payload)),
+        'x-req-source': 'Calendar',
+      },
     });
-    const res = await this.request('PATCH', `/me/events/${eventId}`, {
-      body: { ShowAs: 'Free' },
-      timezone,
-    });
-    const raw = (await res.json()) as OwaCalendarEvent;
+
+    const svcBody = (await res.json()) as { Body: { ResponseCode: string; MessageText?: string } };
+    if (svcBody.Body.ResponseCode !== 'NoError') {
+      throw new Error(`OWA Follow error: ${svcBody.Body.ResponseCode} — ${svcBody.Body.MessageText ?? ''}`);
+    }
+
+    // Fetch the updated event to return its new state
+    const updated = await this.request('GET', `/me/events/${eventId}`, { timezone });
+    const raw = (await updated.json()) as OwaCalendarEvent;
     return this.normalise(raw);
   }
 

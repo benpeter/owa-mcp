@@ -211,11 +211,12 @@ server.tool(
   'Follow a calendar event without formally RSVPing. The event appears on your calendar with ShowAs=Free. The organizer is NOT notified. Emulates New Outlook\'s "Follow this event" feature.',
   {
     eventId: z.string().describe('Event ID from get_calendar_events'),
+    comment: z.string().optional().describe('Optional message included in the follow notification to the organizer'),
     timezone: z.string().optional().default('W. Europe Standard Time')
       .describe('Timezone for returned event times'),
   },
-  async ({ eventId, timezone }) => {
-    const event = await calendarClient.followEvent(eventId, timezone);
+  async ({ eventId, comment, timezone }) => {
+    const event = await calendarClient.followEvent(eventId, comment, timezone);
     return { content: [{ type: 'text', text: JSON.stringify(event, null, 2) }] };
   }
 );
