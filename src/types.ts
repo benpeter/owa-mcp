@@ -81,3 +81,94 @@ export interface OwaRsvpPayload {
     End: { DateTime: string; TimeZone: string };
   };
 }
+
+// ── Mail types ──────────────────────────────────────────────
+
+export interface MailFolder {
+  id: string;
+  displayName: string;
+  parentFolderId: string;
+  unreadCount: number;
+  totalCount: number;
+  childFolderCount: number;
+}
+
+export interface MailMessage {
+  id: string;
+  subject: string;
+  from: string;
+  toRecipients: string[];
+  ccRecipients: string[];
+  receivedDateTime: string;
+  isRead: boolean;
+  hasAttachments: boolean;
+  importance: string;
+  bodyPreview: string;
+  body?: string;
+  bodyType?: string;
+  conversationId: string;
+  flag: string;
+  parentFolderId: string;
+  attachments?: MailAttachment[];
+}
+
+export interface MailAttachment {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+}
+
+export interface MailAttachmentDownload {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+  filePath: string;
+}
+
+// Raw OWA response shapes
+
+export interface OwaMailFolder {
+  Id: string;
+  DisplayName: string;
+  ParentFolderId: string;
+  UnreadItemCount: number;
+  TotalItemCount: number;
+  ChildFolderCount: number;
+}
+
+export interface OwaMailMessage {
+  Id: string;
+  Subject: string;
+  From: { EmailAddress: { Name: string; Address: string } };
+  ToRecipients: { EmailAddress: { Name: string; Address: string } }[];
+  CcRecipients: { EmailAddress: { Name: string; Address: string } }[];
+  ReceivedDateTime: string;
+  IsRead: boolean;
+  HasAttachments: boolean;
+  Importance: string;
+  BodyPreview: string;
+  Body?: { ContentType: string; Content: string };
+  ConversationId: string;
+  Flag: { FlagStatus: string };
+  ParentFolderId: string;
+  Attachments?: OwaMailAttachment[];
+}
+
+export interface OwaMailAttachment {
+  Id: string;
+  Name: string;
+  ContentType: string;
+  Size: number;
+  ContentBytes?: string;
+}
+
+export interface OwaMailListResponse {
+  value: OwaMailMessage[];
+  '@odata.nextLink'?: string;
+}
+
+export interface OwaMailFolderListResponse {
+  value: OwaMailFolder[];
+}
