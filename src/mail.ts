@@ -59,6 +59,20 @@ export class MailClient {
     return { messages, nextPageToken };
   }
 
+  async getMessage(messageId: string, format: 'text' | 'html' = 'text'): Promise<MailMessage> {
+    const params = new URLSearchParams({
+      '$select': 'Id,Subject,From,ToRecipients,CcRecipients,ReceivedDateTime,IsRead,HasAttachments,Importance,BodyPreview,Body,ConversationId,Flag,ParentFolderId',
+      '$expand': 'Attachments($select=Id,Name,ContentType,Size)',
+    });
+    const res = await this.request('GET', `/me/messages/${messageId}?${params}`, {
+      headers: {
+        'Prefer': `outlook.body-content-type="${format}"`,
+      },
+    });
+    const raw = (await res.json()) as OwaMailMessage;
+    return this.normaliseMessage(raw);
+  }
+
   async searchMessages(
     options: {
       query?: string;

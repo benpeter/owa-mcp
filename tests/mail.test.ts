@@ -82,4 +82,31 @@ describe('MailClient', () => {
       client.searchMessages({ query: 'hello', from: 'test@example.com' })
     ).rejects.toThrow('Cannot combine');
   }, 40_000);
+
+  test('getMessage returns full message with text body', async () => {
+    // Get a message ID from Inbox first
+    const list = await client.getMessages('Inbox', { limit: 1 });
+    expect(list.messages.length).toBeGreaterThan(0);
+    const messageId = list.messages[0].id;
+
+    const msg = await client.getMessage(messageId, 'text');
+
+    expect(msg.id).toBe(messageId);
+    expect(typeof msg.body).toBe('string');
+    expect(msg.bodyType).toBe('text');
+    expect(typeof msg.subject).toBe('string');
+    expect(typeof msg.from).toBe('string');
+  }, 40_000);
+
+  test('getMessage returns HTML body when requested', async () => {
+    const list = await client.getMessages('Inbox', { limit: 1 });
+    expect(list.messages.length).toBeGreaterThan(0);
+    const messageId = list.messages[0].id;
+
+    const msg = await client.getMessage(messageId, 'html');
+
+    expect(msg.id).toBe(messageId);
+    expect(typeof msg.body).toBe('string');
+    expect(msg.bodyType).toBe('html');
+  }, 40_000);
 });
