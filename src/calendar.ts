@@ -1,6 +1,14 @@
 // src/calendar.ts
 import type { TokenManager } from './auth.js';
-import type { CalendarEvent, OwaCalendarViewResponse, OwaCalendarEvent } from './types.js';
+import type {
+  CalendarEvent,
+  OwaCalendarViewResponse,
+  OwaCalendarEvent,
+  OwaCreateEventPayload,
+  OwaUpdateEventPayload,
+  RsvpAction,
+  OwaRsvpPayload,
+} from './types.js';
 
 const OWA_BASE = 'https://outlook.office.com/api/v2.0';
 
@@ -12,10 +20,6 @@ export interface GetCalendarEventsOptions {
 export class CalendarClient {
   constructor(private readonly tokens: TokenManager) {}
 
-  /**
-   * Returns calendar events between startDateTime and endDateTime (ISO 8601 strings).
-   * Handles OData paging automatically up to maxResults.
-   */
   async getCalendarEvents(
     startDateTime: string,
     endDateTime: string,
@@ -23,7 +27,6 @@ export class CalendarClient {
   ): Promise<CalendarEvent[]> {
     const { maxResults = 50, timezone = 'UTC' } = options;
 
-    const token = await this.tokens.getToken();
     const params = new URLSearchParams({
       startDateTime,
       endDateTime,
@@ -32,24 +35,11 @@ export class CalendarClient {
       '$orderby': 'Start/DateTime asc',
     });
 
-    const url = `${OWA_BASE}/me/calendarview?${params}`;
     const events: CalendarEvent[] = [];
-    let nextLink: string | undefined = url;
+    let nextLink: string | undefined = `${OWA_BASE}/me/calendarview?${params}`;
 
     while (nextLink && events.length < maxResults) {
-      const res = await fetch(nextLink, {
-        headers: {
-          Authorization: `Bearer ${token.value}`,
-          Accept: 'application/json',
-          Prefer: `outlook.timezone="${timezone}"`,
-        },
-      });
-
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`OWA calendar API error ${res.status}: ${body}`);
-      }
-
+      const res = await this.request('GET', nextLink, { timezone });
       const data = (await res.json()) as OwaCalendarViewResponse;
       for (const raw of data.value) {
         events.push(this.normalise(raw));
@@ -59,6 +49,86 @@ export class CalendarClient {
     }
 
     return events;
+  }
+
+  async createEvent(
+    payload: OwaCreateEventPayload,
+    timezone?: string
+  ): Promise<CalendarEvent> {
+    const res = await this.request('POST', '/me/events', { body: payload, timezone });
+    const raw = (await res.json()) as OwaCalendarEvent;
+    return this.normalise(raw);
+  }
+
+  async updateEvent(
+    eventId: string,
+    payload: OwaUpdateEventPayload,
+    timezone?: string
+  ): Promise<CalendarEvent> {
+    const res = await this.request('PATCH', `/me/events/${eventId}`, { body: payload, timezone });
+    const raw = (await res.json()) as OwaCalendarEvent;
+    return this.normalise(raw);
+  }
+
+  async cancelEvent(eventId: string, comment?: string): Promise<void> {
+    await this.request('POST', `/me/events/${eventId}/cancel`, {
+      body: comment ? { Comment: comment } : {},
+    });
+  }
+
+  async deleteEvent(eventId: string): Promise<void> {
+    await this.request('DELETE', `/me/events/${eventId}`);
+  }
+
+  async respondToEvent(
+    eventId: string,
+    action: RsvpAction,
+    payload: OwaRsvpPayload = {}
+  ): Promise<void> {
+    await this.request('POST', `/me/events/${eventId}/${action}`, { body: payload });
+  }
+
+  async followEvent(eventId: string, timezone?: string): Promise<CalendarEvent> {
+    await this.request('POST', `/me/events/${eventId}/tentativelyaccept`, {
+      body: { SendResponse: false },
+    });
+    const res = await this.request('PATCH', `/me/events/${eventId}`, {
+      body: { ShowAs: 'Free' },
+      timezone,
+    });
+    const raw = (await res.json()) as OwaCalendarEvent;
+    return this.normalise(raw);
+  }
+
+  private async request(
+    method: string,
+    path: string,
+    options: { body?: unknown; timezone?: string } = {}
+  ): Promise<Response> {
+    const token = await this.tokens.getToken();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token.value}`,
+      Accept: 'application/json',
+    };
+    if (options.timezone) {
+      headers['Prefer'] = `outlook.timezone="${options.timezone}"`;
+    }
+    if (options.body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    const url = path.startsWith('http') ? path : `${OWA_BASE}${path}`;
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`OWA API error ${res.status} ${method} ${path}: ${text}`);
+    }
+    return res;
   }
 
   private normalise(raw: OwaCalendarEvent): CalendarEvent {
