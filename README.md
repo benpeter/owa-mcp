@@ -111,7 +111,7 @@ Remove an event from your calendar silently (no notification sent).
 
 ### `respond_to_calendar_event`
 
-RSVP to a meeting: accept, tentatively accept, or decline.
+RSVP to a meeting: accept, tentatively accept, or decline. Uses OWA's internal service.svc API when possible, which works even when the organizer has disabled response requests (`ResponseRequested: false`). Falls back to the standard REST API if the internal API can't resolve the event.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|

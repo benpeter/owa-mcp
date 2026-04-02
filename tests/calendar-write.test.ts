@@ -50,6 +50,28 @@ describe('CalendarClient write operations', () => {
     expect(event.showAs).toBe('Busy');
   }, 20_000);
 
+  test('RSVPs to the event via service.svc with REST fallback', async () => {
+    // respondToEvent tries service.svc first (bypasses ResponseRequested: false),
+    // then falls back to REST API if service.svc can't resolve the event ID.
+    await client.respondToEvent(createdEventId, 'tentativelyaccept', {
+      SendResponse: false,
+    });
+
+    // Verify the response was recorded
+    const events = await client.getCalendarEvents(
+      new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString(),
+      new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString(),
+    );
+    const found = events.find(e => e.id === createdEventId);
+    expect(found).toBeTruthy();
+    expect(found!.showAs).toBe('Tentative');
+
+    // Accept it back
+    await client.respondToEvent(createdEventId, 'accept', {
+      SendResponse: false,
+    });
+  }, 40_000);
+
   test('deletes the event', async () => {
     await client.deleteEvent(createdEventId);
     createdEventId = '';

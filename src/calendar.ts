@@ -84,8 +84,69 @@ export class CalendarClient {
   async respondToEvent(
     eventId: string,
     action: RsvpAction,
-    payload: OwaRsvpPayload = {}
+    payload: OwaRsvpPayload = {},
+    timezone?: string
   ): Promise<void> {
+    // Try service.svc first — bypasses ResponseRequested: false restriction.
+    // Falls back to REST API if service.svc can't resolve the event ID.
+    const token = await this.tokens.getToken();
+    try {
+      const svcEventId = await this.toServiceId(eventId, token.value);
+      const responseMap: Record<RsvpAction, string> = {
+        accept: 'Accept',
+        tentativelyaccept: 'Tentative',
+        decline: 'Decline',
+      };
+
+      const svcPayload = {
+        __type: 'RespondToCalendarEventJsonRequest:#Exchange',
+        Header: {
+          __type: 'JsonRequestHeaders:#Exchange',
+          RequestServerVersion: 'V2018_01_08',
+          TimeZoneContext: {
+            __type: 'TimeZoneContext:#Exchange',
+            TimeZoneDefinition: {
+              __type: 'TimeZoneDefinitionType:#Exchange',
+              Id: timezone ?? 'W. Europe Standard Time',
+            },
+          },
+        },
+        Body: {
+          __type: 'RespondToCalendarEventRequest:#Exchange',
+          EventId: { __type: 'ItemId:#Exchange', Id: svcEventId },
+          Response: responseMap[action],
+          SendResponse: payload.SendResponse ?? true,
+          Notes: payload.Comment
+            ? { __type: 'BodyContentType:#Exchange', BodyType: 'HTML', Value: `<div>${payload.Comment}</div>` }
+            : { __type: 'BodyContentType:#Exchange', BodyType: 'HTML', Value: '<div><br></div>' },
+          ProposedStartTime: payload.ProposedNewTime?.Start?.DateTime ?? '',
+          ProposedEndTime: payload.ProposedNewTime?.End?.DateTime ?? '',
+          Attendance: 0,
+          Mode: 0,
+        },
+      };
+
+      const res = await fetch(`${OWA_SVC}?action=RespondToCalendarEvent`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token.value}`,
+          'Content-Type': 'application/json; charset=utf-8',
+          action: 'RespondToCalendarEvent',
+          'x-owa-urlpostdata': encodeURIComponent(JSON.stringify(svcPayload)),
+          'x-req-source': 'Calendar',
+        },
+      });
+
+      const svcBody = (await res.json()) as { Body: { ResponseCode: string; MessageText?: string } };
+      if (svcBody.Body.ResponseCode === 'NoError') {
+        return; // service.svc succeeded
+      }
+      // Fall through to REST API
+    } catch {
+      // Fall through to REST API
+    }
+
+    // Fallback: REST API (subject to ResponseRequested restriction)
     await this.request('POST', `/me/events/${eventId}/${action}`, { body: payload });
   }
 

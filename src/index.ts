@@ -199,7 +199,7 @@ server.tool(
         End: { DateTime: params.proposedEndDateTime, TimeZone: params.proposedTimezone! },
       };
     }
-    await calendarClient.respondToEvent(params.eventId, actionMap[params.response], payload);
+    await calendarClient.respondToEvent(params.eventId, actionMap[params.response], payload, params.proposedTimezone);
     return {
       content: [{ type: 'text', text: JSON.stringify({ responded: true, eventId: params.eventId, response: params.response, comment: params.comment ?? null }, null, 2) }],
     };
