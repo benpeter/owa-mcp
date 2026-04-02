@@ -43,6 +43,8 @@ Tests are integration tests — they need a live Edge session. There are no unit
 2. Register the tool in `src/index.ts` using `server.tool(name, description, zodSchema, handler)`
 3. Add an integration test in `tests/`
 
+**Tool output convention:** All tools must return structured JSON, not formatted text. Return the data array (or object) directly via `JSON.stringify(data, null, 2)`. The consuming LLM is better at reasoning over structured data and can format it however suits the user's question. Never pre-format, truncate fields, or drop metadata — pass through the full normalized object.
+
 The OWA REST API base is `https://outlook.office.com/api/v2.0`. It mirrors the Microsoft Graph API shape closely — most Graph calendar/mail docs apply with `Subject`/`Start`/`End` casing instead of `subject`/`start`/`end`.
 
 ## Known limitations

@@ -46,43 +46,8 @@ server.tool(
       timezone,
     });
 
-    if (events.length === 0) {
-      return {
-        content: [{ type: 'text', text: 'No events found in the specified time range.' }],
-      };
-    }
-
-    const lines = events.map((e) => {
-      const time = e.isAllDay
-        ? `All day`
-        : `${e.start} → ${e.end}`;
-      const flags = [
-        e.isOnlineMeeting ? 'Teams' : '',
-        e.isRecurring ? 'Recurring' : '',
-        e.isPrivate ? 'Private' : '',
-        e.showAs !== 'Busy' ? e.showAs : '',
-      ]
-        .filter(Boolean)
-        .join(', ');
-      return [
-        `**${e.subject}**`,
-        `  Time: ${time}`,
-        e.organizer ? `  Organizer: ${e.organizer}` : '',
-        e.location ? `  Location: ${e.location}` : '',
-        flags ? `  Flags: ${flags}` : '',
-        e.bodyPreview ? `  Preview: ${e.bodyPreview.substring(0, 120)}` : '',
-      ]
-        .filter(Boolean)
-        .join('\n');
-    });
-
     return {
-      content: [
-        {
-          type: 'text',
-          text: `Found ${events.length} event(s):\n\n${lines.join('\n\n')}`,
-        },
-      ],
+      content: [{ type: 'text', text: JSON.stringify(events, null, 2) }],
     };
   }
 );
