@@ -1,14 +1,14 @@
 {
   "name": "owa-mcp",
   "version": "0.1.0",
-  "description": "MCP server for Microsoft Outlook calendar via Playwright Edge session interception",
+  "description": "MCP server for Microsoft Outlook calendar and email via Playwright Edge session interception",
   "author": "Ben Peter <bp@ben-peter.com>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/benpeter/owa-mcp"
   },
-  "keywords": ["mcp", "outlook", "calendar", "microsoft-365", "claude-code", "playwright"],
+  "keywords": ["mcp", "outlook", "calendar", "email", "mail", "microsoft-365", "claude-code", "playwright"],
   "type": "module",
   "main": "dist/index.js",
   "bin": {

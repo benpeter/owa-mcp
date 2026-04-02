@@ -2,7 +2,7 @@
 
 ## What this project is
 
-An MCP server that exposes Microsoft Outlook calendar data to Claude Code. It works by intercepting Bearer tokens that Outlook Web (outlook.office.com) emits when loaded in a headless Playwright-controlled Microsoft Edge browser using the user's existing Edge profile.
+An MCP server that exposes Microsoft Outlook calendar and email data to Claude Code. It works by intercepting Bearer tokens that Outlook Web (outlook.office.com) emits when loaded in a headless Playwright-controlled Microsoft Edge browser using the user's existing Edge profile.
 
 ## Why this architecture exists
 
@@ -23,6 +23,7 @@ The solution: Edge is already signed in to M365 and satisfies all Conditional Ac
 |------|---------|
 | `src/auth.ts` | `TokenManager` — launches headless Edge, intercepts token, caches with expiry |
 | `src/calendar.ts` | `CalendarClient` — calls `outlook.office.com/api/v2.0/me/calendarview` |
+| `src/mail.ts` | `MailClient` — calls `outlook.office.com/api/v2.0` mail endpoints |
 | `src/types.ts` | Shared types: `OwaToken`, `CalendarEvent`, `OwaCalendarViewResponse` |
 | `src/index.ts` | MCP server, tool registration via `@modelcontextprotocol/sdk` |
 
