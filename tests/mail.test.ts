@@ -27,4 +27,32 @@ describe('MailClient', () => {
     expect(typeof inbox!.totalCount).toBe('number');
     expect(typeof inbox!.childFolderCount).toBe('number');
   }, 40_000);
+
+  test('getMessages returns messages from Inbox', async () => {
+    const result = await client.getMessages('Inbox', { limit: 5 });
+
+    expect(Array.isArray(result.messages)).toBe(true);
+    expect(result.messages.length).toBeGreaterThan(0);
+    expect(result.messages.length).toBeLessThanOrEqual(5);
+
+    const msg = result.messages[0];
+    expect(typeof msg.id).toBe('string');
+    expect(typeof msg.subject).toBe('string');
+    expect(typeof msg.from).toBe('string');
+    expect(Array.isArray(msg.toRecipients)).toBe(true);
+    expect(typeof msg.receivedDateTime).toBe('string');
+    expect(typeof msg.isRead).toBe('boolean');
+    expect(typeof msg.hasAttachments).toBe('boolean');
+    expect(typeof msg.bodyPreview).toBe('string');
+    expect(msg.body).toBeUndefined();
+  }, 40_000);
+
+  test('getMessages with unread filter returns only unread', async () => {
+    const result = await client.getMessages('Inbox', { filter: 'unread', limit: 5 });
+
+    expect(Array.isArray(result.messages)).toBe(true);
+    for (const msg of result.messages) {
+      expect(msg.isRead).toBe(false);
+    }
+  }, 40_000);
 });
