@@ -43,3 +43,41 @@ export interface OwaCalendarEvent {
   Sensitivity: string;   // Normal | Personal | Private | Confidential
   BodyPreview: string;
 }
+
+// Request payload for POST /me/events (PascalCase for OWA API)
+export interface OwaCreateEventPayload {
+  Subject: string;
+  Start: { DateTime: string; TimeZone: string };
+  End: { DateTime: string; TimeZone: string };
+  Body?: { ContentType: 'HTML' | 'Text'; Content: string };
+  Location?: { DisplayName: string };
+  Attendees?: OwaAttendee[];
+  IsAllDay?: boolean;
+  ShowAs?: string;
+  Importance?: 'Low' | 'Normal' | 'High';
+  Sensitivity?: 'Normal' | 'Personal' | 'Private' | 'Confidential';
+  IsReminderOn?: boolean;
+  ReminderMinutesBeforeStart?: number;
+  IsOnlineMeeting?: boolean;
+  Recurrence?: unknown;
+}
+
+export interface OwaAttendee {
+  EmailAddress: { Address: string; Name?: string };
+  Type: 'Required' | 'Optional' | 'Resource';
+}
+
+// Request payload for PATCH /me/events/{id}
+export type OwaUpdateEventPayload = Partial<OwaCreateEventPayload>;
+
+// RSVP action types
+export type RsvpAction = 'accept' | 'tentativelyaccept' | 'decline';
+
+export interface OwaRsvpPayload {
+  Comment?: string;
+  SendResponse?: boolean;
+  ProposedNewTime?: {
+    Start: { DateTime: string; TimeZone: string };
+    End: { DateTime: string; TimeZone: string };
+  };
+}
