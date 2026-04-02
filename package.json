@@ -2,6 +2,13 @@
   "name": "owa-mcp",
   "version": "0.1.0",
   "description": "MCP server for Microsoft Outlook calendar via Playwright Edge session interception",
+  "author": "Ben Peter <bp@ben-peter.com>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/benpeter/owa-mcp"
+  },
+  "keywords": ["mcp", "outlook", "calendar", "microsoft-365", "claude-code", "playwright"],
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -10,8 +17,14 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsup src/index.ts --format esm --dts --out-dir dist",
+    "prepublishOnly": "npm run build",
     "test": "node --experimental-vm-modules node_modules/.bin/jest --testTimeout=30000"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "jest": {
     "preset": "ts-jest/presets/default-esm",
     "testEnvironment": "node",

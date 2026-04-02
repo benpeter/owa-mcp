@@ -24,28 +24,23 @@ Many enterprise Microsoft 365 tenants enforce Conditional Access policies that b
 ## Installation
 
 ```bash
+claude mcp add owa -s user -- npx owa-mcp
+```
+
+That's it. Restart Claude Code — you should see calendar tools available.
+
+<details>
+<summary>Manual installation (alternative)</summary>
+
+```bash
 git clone https://github.com/benpeter/owa-mcp
 cd owa-mcp
 npm install
 npm run build
+claude mcp add owa -s user -- node /absolute/path/to/owa-mcp/dist/index.js
 ```
 
-## Claude Code Configuration
-
-Add to `~/.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "owa": {
-      "command": "node",
-      "args": ["/absolute/path/to/owa-mcp/dist/index.js"]
-    }
-  }
-}
-```
-
-Restart Claude Code. You should now have calendar tools available.
+</details>
 
 ## Available Tools
 
