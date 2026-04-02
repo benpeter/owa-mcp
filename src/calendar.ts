@@ -94,9 +94,11 @@ export class CalendarClient {
    * Sends a "Following" notification to the organizer. The event appears
    * on the user's calendar with ShowAs=Free and subject prefixed "Following:".
    * Uses the OWA service.svc internal API with Attendance=3, Mode=3.
+   * Falls back to tentativelyAccept + PATCH for events where service.svc fails.
    */
   async followEvent(eventId: string, comment?: string, timezone?: string): Promise<CalendarEvent> {
     const token = await this.tokens.getToken();
+    const svcEventId = await this.toServiceId(eventId, token.value);
     const payload = {
       __type: 'RespondToCalendarEventJsonRequest:#Exchange',
       Header: {
@@ -112,7 +114,7 @@ export class CalendarClient {
       },
       Body: {
         __type: 'RespondToCalendarEventRequest:#Exchange',
-        EventId: { __type: 'ItemId:#Exchange', Id: eventId },
+        EventId: { __type: 'ItemId:#Exchange', Id: svcEventId },
         Response: 'Tentative',
         SendResponse: true,
         Notes: {
@@ -140,13 +142,43 @@ export class CalendarClient {
 
     const svcBody = (await res.json()) as { Body: { ResponseCode: string; MessageText?: string } };
     if (svcBody.Body.ResponseCode !== 'NoError') {
-      throw new Error(`OWA Follow error: ${svcBody.Body.ResponseCode} — ${svcBody.Body.MessageText ?? ''}`);
+      // Fallback: tentativelyAccept + PATCH ShowAs=Free
+      // This handles single-instance events where service.svc can't resolve the ID.
+      // Note: organizer is notified only if a comment is provided.
+      const sendResponse = !!comment;
+      await this.request('POST', `/me/events/${eventId}/tentativelyaccept`, {
+        body: { Comment: comment ?? '', SendResponse: sendResponse },
+      });
+      await this.request('PATCH', `/me/events/${eventId}`, {
+        body: { ShowAs: 'Free' },
+      });
     }
 
-    // Fetch the updated event to return its new state
     const updated = await this.request('GET', `/me/events/${eventId}`, { timezone });
     const raw = (await updated.json()) as OwaCalendarEvent;
     return this.normalise(raw);
+  }
+
+  /** Translate a REST API event ID to the format service.svc expects. */
+  private async toServiceId(restId: string, token: string): Promise<string> {
+    const res = await fetch(`${OWA_BASE.replace('/v2.0', '/beta')}/me/translateExchangeIds`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        InputIds: [restId],
+        TargetIdType: 'RestImmutableEntryId',
+        SourceIdType: 'RestId',
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`ID translation failed: ${res.status}`);
+    }
+    const data = (await res.json()) as { value: { TargetId: string }[] };
+    // Convert base64url to standard base64 for service.svc
+    return data.value[0].TargetId.replace(/-/g, '+').replace(/_/g, '/');
   }
 
   private async request(
