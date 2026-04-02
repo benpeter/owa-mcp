@@ -109,4 +109,34 @@ describe('MailClient', () => {
     expect(typeof msg.body).toBe('string');
     expect(msg.bodyType).toBe('html');
   }, 40_000);
+
+  test('getAttachment downloads file to disk', async () => {
+    // Find a message with attachments by fetching recent messages and filtering client-side
+    // (the OWA API rejects HasAttachments as an InefficientFilter)
+    const result = await client.getMessages('Inbox', { limit: 50 });
+    const msgWithAttachment = result.messages.find(m => m.hasAttachments);
+    if (!msgWithAttachment) {
+      console.warn('No messages with attachments found, skipping test');
+      return;
+    }
+
+    // Get full message to get attachment metadata
+    const fullMsg = await client.getMessage(msgWithAttachment.id, 'text');
+    expect(fullMsg.attachments).toBeDefined();
+    expect(fullMsg.attachments!.length).toBeGreaterThan(0);
+
+    const att = fullMsg.attachments![0];
+    const downloaded = await client.getAttachment(fullMsg.id, att.id);
+
+    expect(downloaded.name).toBe(att.name);
+    expect(downloaded.contentType).toBe(att.contentType);
+    expect(typeof downloaded.filePath).toBe('string');
+
+    // Verify file exists
+    const fs = await import('fs');
+    expect(fs.existsSync(downloaded.filePath)).toBe(true);
+
+    // Cleanup
+    fs.unlinkSync(downloaded.filePath);
+  }, 40_000);
 });

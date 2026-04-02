@@ -1,11 +1,16 @@
 // src/mail.ts
 // tva
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import type { TokenManager } from './auth.js';
 import type {
   MailFolder,
   MailMessage,
+  MailAttachmentDownload,
   OwaMailFolder,
   OwaMailMessage,
+  OwaMailAttachment,
   OwaMailFolderListResponse,
   OwaMailListResponse,
 } from './types.js';
@@ -71,6 +76,31 @@ export class MailClient {
     });
     const raw = (await res.json()) as OwaMailMessage;
     return this.normaliseMessage(raw);
+  }
+
+  async getAttachment(messageId: string, attachmentId: string): Promise<MailAttachmentDownload> {
+    const res = await this.request('GET', `/me/messages/${messageId}/attachments/${attachmentId}`);
+    const raw = (await res.json()) as OwaMailAttachment;
+
+    const dir = path.join(os.tmpdir(), 'owa-mcp-attachments');
+    fs.mkdirSync(dir, { recursive: true });
+
+    const sanitised = raw.Name
+      .replace(/[/\\]/g, '_')
+      .replace(/[\x00-\x1f]/g, '')
+      .slice(0, 200);
+    const filePath = path.join(dir, sanitised);
+
+    const buffer = Buffer.from(raw.ContentBytes!, 'base64');
+    fs.writeFileSync(filePath, buffer);
+
+    return {
+      id: raw.Id,
+      name: raw.Name,
+      contentType: raw.ContentType,
+      size: raw.Size,
+      filePath,
+    };
   }
 
   async searchMessages(
