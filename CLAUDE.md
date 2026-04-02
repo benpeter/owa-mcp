@@ -47,6 +47,33 @@ Tests are integration tests — they need a live Edge session. There are no unit
 
 The OWA REST API base is `https://outlook.office.com/api/v2.0`. It mirrors the Microsoft Graph API shape closely — most Graph calendar/mail docs apply with `Subject`/`Start`/`End` casing instead of `subject`/`start`/`end`.
 
+## Two API surfaces
+
+This project uses **two different OWA API surfaces**:
+
+### 1. REST API (`outlook.office.com/api/v2.0`)
+Standard REST endpoints for CRUD operations. Used by `get_calendar_events`, `create_calendar_event`, `update_calendar_event`, `cancel_calendar_event`, `delete_calendar_event`. Event IDs are in EwsId/RestId format (base64url, start with `AAMkA`).
+
+### 2. OWA service.svc (`outlook.office.com/owa/service.svc`)
+Internal OWA endpoint used by the Outlook Web client. Payload goes in the `x-owa-urlpostdata` header (URL-encoded JSON), not the request body (content-length=0). Used for `follow_calendar_event` and will be used for `respond_to_calendar_event`.
+
+**Key differences from REST API:**
+- Bypasses `ResponseRequested: false` — can RSVP to events where the REST API returns "organizer hasn't requested a response"
+- Uses `RestImmutableEntryId` format for event IDs (base64, start with `AAkA`), NOT the REST API's `RestId` format
+- Translation via `POST /api/beta/me/translateExchangeIds` with `SourceIdType: 'RestId'`, `TargetIdType: 'RestImmutableEntryId'` — then convert base64url to standard base64 (`-` → `+`, `_` → `/`)
+- **ID translation is unreliable for some events** (already-followed events, some single-instance events return `ErrorItemNotFound`). The correct approach is to fetch ImmutableIds directly via `service.svc?action=GetCalendarEvent` with `Prefer: IdType="ImmutableId"` header, which is what the OWA browser client does internally.
+- Supports `Attendance` and `Mode` fields not available in the REST API:
+  - `Attendance: 0, Mode: 0` = normal attendee (Accept/Tentative/Decline)
+  - `Attendance: 3, Mode: 3` = Follow (track without RSVPing)
+
+**Follow protocol (reverse-engineered from New Outlook):**
+```
+POST service.svc?action=RespondToCalendarEvent
+x-owa-urlpostdata: { Body: { Response: "Tentative", Attendance: 3, Mode: 3, SendResponse: true/false, Notes: { Value: "<div>message</div>" } } }
+```
+- Recurring occurrences: `SendResponse: true` (organizer gets "is following" notification, subject prefixed "Following:")
+- Single-instance events: `SendResponse: false` (no notification, but subject still prefixed "Following:")
+
 ## Known limitations
 
 - macOS only (Edge profile path is hardcoded to Mac location)
