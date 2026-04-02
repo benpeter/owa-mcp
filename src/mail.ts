@@ -59,6 +59,59 @@ export class MailClient {
     return { messages, nextPageToken };
   }
 
+  async searchMessages(
+    options: {
+      query?: string;
+      from?: string;
+      subject?: string;
+      hasAttachments?: boolean;
+      receivedAfter?: string;
+      receivedBefore?: string;
+      folderId?: string;
+      limit?: number;
+    } = {}
+  ): Promise<{ messages: MailMessage[]; nextPageToken?: string }> {
+    const { query, from, subject, hasAttachments, receivedAfter, receivedBefore, folderId, limit = 20 } = options;
+    const top = Math.min(limit, 500);
+
+    const hasStructuredFilters = from !== undefined || subject !== undefined
+      || hasAttachments !== undefined || receivedAfter !== undefined || receivedBefore !== undefined;
+
+    if (query && hasStructuredFilters) {
+      throw new Error('Cannot combine full-text query with structured filters. Use one or the other.');
+    }
+
+    const select = 'Id,Subject,From,ToRecipients,CcRecipients,ReceivedDateTime,IsRead,HasAttachments,Importance,BodyPreview,ConversationId,Flag,ParentFolderId';
+
+    const params = new URLSearchParams({
+      '$select': select,
+      '$top': String(top),
+    });
+
+    const basePath = folderId ? `/me/mailfolders/${folderId}/messages` : '/me/messages';
+
+    if (query) {
+      params.set('$search', `"${query}"`);
+    } else {
+      params.set('$orderby', 'ReceivedDateTime desc');
+      const filters: string[] = [];
+      if (from) filters.push(`From/EmailAddress/Address eq '${from}'`);
+      if (subject) filters.push(`contains(Subject, '${subject}')`);
+      if (hasAttachments !== undefined) filters.push(`HasAttachments eq ${hasAttachments}`);
+      if (receivedAfter) filters.push(`ReceivedDateTime ge ${receivedAfter}`);
+      if (receivedBefore) filters.push(`ReceivedDateTime le ${receivedBefore}`);
+      if (filters.length > 0) {
+        params.set('$filter', filters.join(' and '));
+      }
+    }
+
+    const res = await this.request('GET', `${basePath}?${params}`);
+    const data = (await res.json()) as OwaMailListResponse;
+    const messages = data.value.map(m => this.normaliseMessage(m));
+
+    return { messages };
+  }
+
   private buildPresetFilter(filter: string): string | undefined {
     switch (filter) {
       case 'unread':

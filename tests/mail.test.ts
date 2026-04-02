@@ -55,4 +55,31 @@ describe('MailClient', () => {
       expect(msg.isRead).toBe(false);
     }
   }, 40_000);
+
+  test('searchMessages with query returns results', async () => {
+    const result = await client.searchMessages({ query: 'meeting', limit: 5 });
+
+    expect(Array.isArray(result.messages)).toBe(true);
+    // Full-text search should find something in a real mailbox
+    if (result.messages.length > 0) {
+      const msg = result.messages[0];
+      expect(typeof msg.id).toBe('string');
+      expect(typeof msg.subject).toBe('string');
+    }
+  }, 40_000);
+
+  test('searchMessages with structured filters', async () => {
+    const result = await client.searchMessages({
+      receivedAfter: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      limit: 5,
+    });
+
+    expect(Array.isArray(result.messages)).toBe(true);
+  }, 40_000);
+
+  test('searchMessages throws when query and filters both provided', async () => {
+    await expect(
+      client.searchMessages({ query: 'hello', from: 'test@example.com' })
+    ).rejects.toThrow('Cannot combine');
+  }, 40_000);
 });
