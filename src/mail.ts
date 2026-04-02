@@ -21,13 +21,13 @@ export class MailClient {
   constructor(private readonly tokens: TokenManager) {}
 
   async listFolders(parentFolderId?: string): Promise<MailFolder[]> {
-    const path = parentFolderId
+    const endpoint = parentFolderId
       ? `/me/mailfolders/${parentFolderId}/childfolders`
       : '/me/mailfolders';
     const params = new URLSearchParams({
       '$select': 'Id,DisplayName,ParentFolderId,UnreadItemCount,TotalItemCount,ChildFolderCount',
     });
-    const res = await this.request('GET', `${path}?${params}`);
+    const res = await this.request('GET', `${endpoint}?${params}`);
     const data = (await res.json()) as OwaMailFolderListResponse;
     return data.value.map(f => this.normaliseFolder(f));
   }
@@ -91,7 +91,10 @@ export class MailClient {
       .slice(0, 200);
     const filePath = path.join(dir, sanitised);
 
-    const buffer = Buffer.from(raw.ContentBytes!, 'base64');
+    if (!raw.ContentBytes) {
+      throw new Error(`Attachment "${raw.Name}" has no downloadable content (may be a linked/reference attachment)`);
+    }
+    const buffer = Buffer.from(raw.ContentBytes, 'base64');
     fs.writeFileSync(filePath, buffer);
 
     return {
@@ -139,8 +142,8 @@ export class MailClient {
     } else {
       params.set('$orderby', 'ReceivedDateTime desc');
       const filters: string[] = [];
-      if (from) filters.push(`From/EmailAddress/Address eq '${from}'`);
-      if (subject) filters.push(`contains(Subject, '${subject}')`);
+      if (from) filters.push(`From/EmailAddress/Address eq '${from.replace(/'/g, "''")}'`);
+      if (subject) filters.push(`contains(Subject, '${subject.replace(/'/g, "''")}')`);
       if (hasAttachments !== undefined) filters.push(`HasAttachments eq ${hasAttachments}`);
       if (receivedAfter) filters.push(`ReceivedDateTime ge ${receivedAfter}`);
       if (receivedBefore) filters.push(`ReceivedDateTime le ${receivedBefore}`);
@@ -182,9 +185,9 @@ export class MailClient {
     const msg: MailMessage = {
       id: raw.Id,
       subject: raw.Subject,
-      from: this.formatRecipient(raw.From),
-      toRecipients: raw.ToRecipients.map(r => this.formatRecipient(r)),
-      ccRecipients: raw.CcRecipients.map(r => this.formatRecipient(r)),
+      from: raw.From ? this.formatRecipient(raw.From) : '',
+      toRecipients: (raw.ToRecipients ?? []).map(r => this.formatRecipient(r)),
+      ccRecipients: (raw.CcRecipients ?? []).map(r => this.formatRecipient(r)),
       receivedDateTime: raw.ReceivedDateTime,
       isRead: raw.IsRead,
       hasAttachments: raw.HasAttachments,
