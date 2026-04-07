@@ -350,11 +350,17 @@ export class CalendarClient {
       `/me/events/${masterId}?$select=Id,Subject,Start,End,Recurrence,Type,IsAllDay,Organizer,Location,IsOnlineMeeting,ShowAs,Sensitivity,BodyPreview,SeriesMasterId,CancelledOccurrences`,
       { timezone }
     );
-    const raw = (await res.json()) as OwaCalendarEvent & { CancelledOccurrences?: { Start: { DateTime: string } }[] };
+    const raw = (await res.json()) as OwaCalendarEvent & { CancelledOccurrences?: unknown[] };
     const normalised = this.normalise(raw);
-    const cancelledOccurrences = (raw.CancelledOccurrences ?? []).map(
-      (c: { Start: { DateTime: string } }) => c.Start.DateTime
-    );
+    const cancelledOccurrences = (raw.CancelledOccurrences ?? []).map((c: unknown) => {
+      // Graph API returns string[]; OWA v2.0 may return { Start: { DateTime: string } }[]
+      if (typeof c === 'string') return c;
+      if (c && typeof c === 'object' && 'Start' in c) {
+        const start = (c as { Start: { DateTime: string } }).Start;
+        return start?.DateTime ?? String(c);
+      }
+      return String(c);
+    });
     return { ...normalised, cancelledOccurrences };
   }
 
