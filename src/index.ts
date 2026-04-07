@@ -76,6 +76,12 @@ server.tool(
     importance: z.enum(['Low', 'Normal', 'High']).optional().default('Normal'),
     isPrivate: z.boolean().optional().default(false),
     isOnlineMeeting: z.boolean().optional().default(false).describe('Create as Teams meeting'),
+    hideAttendees: z.boolean().optional().default(false)
+      .describe('Hide the attendee list so attendees cannot see who else was invited'),
+    responseRequested: z.boolean().optional().default(true)
+      .describe('Request attendees to send a response. Set false to not request RSVPs'),
+    reminderMinutes: z.number().int().min(0).optional()
+      .describe('Reminder in minutes before event start (e.g. 15). Omit to use Outlook default. Set to 0 to disable reminder'),
   },
   async (params) => {
     const payload: OwaCreateEventPayload = {
@@ -87,7 +93,13 @@ server.tool(
       Importance: params.importance,
       Sensitivity: params.isPrivate ? 'Private' : 'Normal',
       IsOnlineMeeting: params.isOnlineMeeting,
+      HideAttendees: params.hideAttendees,
+      ResponseRequested: params.responseRequested,
     };
+    if (params.reminderMinutes !== undefined) {
+      payload.IsReminderOn = params.reminderMinutes > 0;
+      payload.ReminderMinutesBeforeStart = params.reminderMinutes;
+    }
     if (params.body) {
       payload.Body = { ContentType: 'Text', Content: params.body };
     }
@@ -119,6 +131,12 @@ server.tool(
     location: z.string().optional(),
     showAs: z.enum(['Free', 'Tentative', 'Busy', 'Oof', 'WorkingElsewhere']).optional(),
     isPrivate: z.boolean().optional(),
+    hideAttendees: z.boolean().optional()
+      .describe('Hide the attendee list so attendees cannot see who else was invited'),
+    responseRequested: z.boolean().optional()
+      .describe('Request attendees to send a response'),
+    reminderMinutes: z.number().int().min(0).optional()
+      .describe('Reminder in minutes before event start. Set to 0 to disable reminder'),
   },
   async (params) => {
     const payload: OwaUpdateEventPayload = {};
@@ -138,6 +156,12 @@ server.tool(
     if (params.showAs !== undefined) payload.ShowAs = params.showAs;
     if (params.isPrivate !== undefined) {
       payload.Sensitivity = params.isPrivate ? 'Private' : 'Normal';
+    }
+    if (params.hideAttendees !== undefined) payload.HideAttendees = params.hideAttendees;
+    if (params.responseRequested !== undefined) payload.ResponseRequested = params.responseRequested;
+    if (params.reminderMinutes !== undefined) {
+      payload.IsReminderOn = params.reminderMinutes > 0;
+      payload.ReminderMinutesBeforeStart = params.reminderMinutes;
     }
     const event = await calendarClient.updateEvent(params.eventId, payload, params.timezone);
     return { content: [{ type: 'text', text: JSON.stringify(event, null, 2) }] };

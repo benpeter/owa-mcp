@@ -87,6 +87,8 @@ export interface OwaCreateEventPayload {
   IsReminderOn?: boolean;
   ReminderMinutesBeforeStart?: number;
   IsOnlineMeeting?: boolean;
+  HideAttendees?: boolean;
+  ResponseRequested?: boolean;
   Recurrence?: unknown;
 }
 
