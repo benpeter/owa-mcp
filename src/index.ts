@@ -238,6 +238,22 @@ server.tool(
 );
 
 server.tool(
+  'list_series_instances',
+  'List all occurrences of a recurring series within a date range. Accepts any event ID from the series (resolved to master automatically).',
+  {
+    eventId: z.string().describe('Any event ID from the series — occurrence, exception, or series master. Resolved automatically.'),
+    startDateTime: z.string().describe('Start of time range in ISO 8601 format, e.g. 2026-04-07T00:00:00Z'),
+    endDateTime: z.string().describe('End of time range in ISO 8601 format, e.g. 2026-07-07T00:00:00Z'),
+    timezone: z.string().optional().default('UTC')
+      .describe('IANA timezone name for event times, e.g. Europe/Berlin'),
+  },
+  async ({ eventId, startDateTime, endDateTime, timezone }) => {
+    const instances = await calendarClient.listSeriesInstances(eventId, startDateTime, endDateTime, timezone);
+    return { content: [{ type: 'text', text: JSON.stringify(instances, null, 2) }] };
+  }
+);
+
+server.tool(
   'list_mail_folders',
   'List all mail folders in the mailbox, or child folders of a specific folder.',
   {

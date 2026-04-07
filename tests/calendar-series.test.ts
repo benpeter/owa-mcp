@@ -132,4 +132,33 @@ describe('CalendarClient series operations', () => {
       expect(Array.isArray(master.cancelledOccurrences)).toBe(true);
     }, 40_000);
   });
+
+  describe('listSeriesInstances', () => {
+    test('returns instances for a recurring series', async () => {
+      const start = new Date();
+      const end = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+      const events = await client.getCalendarEvents(start.toISOString(), end.toISOString());
+      const occurrence = events.find(e => e.type === 'occurrence');
+      if (!occurrence) {
+        console.warn('No recurring occurrence found — skipping listSeriesInstances test');
+        return;
+      }
+
+      // List instances over a 30-day window
+      const rangeStart = new Date();
+      const rangeEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const instances = await client.listSeriesInstances(
+        occurrence.id,
+        rangeStart.toISOString(),
+        rangeEnd.toISOString()
+      );
+
+      expect(Array.isArray(instances)).toBe(true);
+      expect(instances.length).toBeGreaterThan(0);
+      for (const inst of instances) {
+        expect(['occurrence', 'exception']).toContain(inst.type);
+        expect(inst.seriesMasterId).toBe(occurrence.seriesMasterId);
+      }
+    }, 40_000);
+  });
 });

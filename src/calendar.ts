@@ -275,6 +275,26 @@ export class CalendarClient {
     return { ...normalised, cancelledOccurrences };
   }
 
+  /**
+   * List all occurrences of a recurring series within a date range.
+   * Accepts any event ID from the series (resolved to master automatically).
+   */
+  async listSeriesInstances(
+    eventId: string,
+    startDateTime: string,
+    endDateTime: string,
+    timezone?: string
+  ): Promise<CalendarEvent[]> {
+    const masterId = await this.resolveSeriesMasterId(eventId);
+    const params = new URLSearchParams({ startDateTime, endDateTime });
+    const res = await this.request('GET',
+      `/me/events/${masterId}/instances?${params}`,
+      { timezone }
+    );
+    const data = (await res.json()) as OwaCalendarViewResponse;
+    return data.value.map(raw => this.normalise(raw));
+  }
+
   /** Translate a REST API event ID to the format service.svc expects. */
   private async toServiceId(restId: string, token: string): Promise<string> {
     const res = await fetch(`${OWA_BASE.replace('/v2.0', '/beta')}/me/translateExchangeIds`, {
