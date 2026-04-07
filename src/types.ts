@@ -7,6 +7,29 @@ export interface OwaToken {
   issuedAt: number;    // unix epoch ms
 }
 
+export interface RecurrencePattern {
+  type: string;           // "daily" | "weekly" | "absoluteMonthly" | "relativeMonthly" | "absoluteYearly" | "relativeYearly"
+  interval: number;
+  daysOfWeek?: string[];
+  dayOfMonth?: number;
+  month?: number;
+  index?: string;
+  firstDayOfWeek?: string;
+}
+
+export interface RecurrenceRange {
+  type: string;           // "endDate" | "numbered" | "noEnd"
+  startDate: string;
+  endDate?: string;
+  numberOfOccurrences?: number;
+  recurrenceTimeZone?: string;
+}
+
+export interface RecurrenceInfo {
+  pattern: RecurrencePattern;
+  range: RecurrenceRange;
+}
+
 export interface CalendarEvent {
   id: string;
   subject: string;
@@ -18,6 +41,9 @@ export interface CalendarEvent {
   isOnlineMeeting: boolean;
   showAs: string;      // Free | Tentative | Busy | Oof | WorkingElsewhere | Unknown
   isRecurring: boolean;
+  type: 'singleInstance' | 'occurrence' | 'exception' | 'seriesMaster';
+  seriesMasterId: string | null;
+  recurrence: RecurrenceInfo | null;
   isPrivate: boolean;
   bodyPreview: string;
 }
@@ -41,6 +67,8 @@ export interface OwaCalendarEvent {
   IsReminderOn: boolean;
   Recurrence: unknown | null;
   Sensitivity: string;   // Normal | Personal | Private | Confidential
+  Type: string;
+  SeriesMasterId: string | null;
   BodyPreview: string;
 }
 
