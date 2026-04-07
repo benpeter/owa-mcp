@@ -224,6 +224,20 @@ server.tool(
 );
 
 server.tool(
+  'get_series_master',
+  'Inspect the master event of a recurring series. Returns recurrence pattern, cancelled occurrences, and full event details. Accepts any event ID from the series (occurrence, exception, or master).',
+  {
+    eventId: z.string().describe('Any event ID from the series — occurrence, exception, or series master. Resolved automatically.'),
+    timezone: z.string().optional().default('UTC')
+      .describe('IANA timezone name for event times, e.g. Europe/Berlin'),
+  },
+  async ({ eventId, timezone }) => {
+    const master = await calendarClient.getSeriesMaster(eventId, timezone);
+    return { content: [{ type: 'text', text: JSON.stringify(master, null, 2) }] };
+  }
+);
+
+server.tool(
   'list_mail_folders',
   'List all mail folders in the mailbox, or child folders of a specific folder.',
   {

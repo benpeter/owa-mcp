@@ -257,6 +257,24 @@ export class CalendarClient {
     return { recurrence: raw.Recurrence, event: raw };
   }
 
+  /**
+   * Get the series master event for any event in a recurring series.
+   * Returns the master with full recurrence info and cancelled occurrences.
+   */
+  async getSeriesMaster(eventId: string, timezone?: string): Promise<CalendarEvent & { cancelledOccurrences: string[] }> {
+    const masterId = await this.resolveSeriesMasterId(eventId);
+    const res = await this.request('GET',
+      `/me/events/${masterId}?$select=Id,Subject,Start,End,Recurrence,Type,IsAllDay,Organizer,Location,IsOnlineMeeting,ShowAs,Sensitivity,BodyPreview,SeriesMasterId,CancelledOccurrences`,
+      { timezone }
+    );
+    const raw = (await res.json()) as OwaCalendarEvent & { CancelledOccurrences?: { Start: { DateTime: string } }[] };
+    const normalised = this.normalise(raw);
+    const cancelledOccurrences = (raw.CancelledOccurrences ?? []).map(
+      (c: { Start: { DateTime: string } }) => c.Start.DateTime
+    );
+    return { ...normalised, cancelledOccurrences };
+  }
+
   /** Translate a REST API event ID to the format service.svc expects. */
   private async toServiceId(restId: string, token: string): Promise<string> {
     const res = await fetch(`${OWA_BASE.replace('/v2.0', '/beta')}/me/translateExchangeIds`, {

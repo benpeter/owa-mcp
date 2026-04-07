@@ -108,4 +108,28 @@ describe('CalendarClient series operations', () => {
         .rejects.toThrow('not part of a recurring series');
     }, 40_000);
   });
+
+  describe('getSeriesMaster', () => {
+    test('returns master with recurrence from occurrence ID', async () => {
+      const start = new Date();
+      const end = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+      const events = await client.getCalendarEvents(start.toISOString(), end.toISOString());
+      const occurrence = events.find(e => e.type === 'occurrence');
+      if (!occurrence) {
+        console.warn('No recurring occurrence found — skipping getSeriesMaster test');
+        return;
+      }
+
+      const master = await client.getSeriesMaster(occurrence.id);
+      expect(master.type).toBe('seriesmaster');
+      expect(master.id).toBe(occurrence.seriesMasterId);
+      expect(master.recurrence).not.toBeNull();
+      expect(master.recurrence!.pattern).toHaveProperty('type');
+      expect(master.recurrence!.pattern).toHaveProperty('interval');
+      expect(master.recurrence!.range).toHaveProperty('type');
+      expect(master.recurrence!.range).toHaveProperty('startDate');
+      expect(master).toHaveProperty('cancelledOccurrences');
+      expect(Array.isArray(master.cancelledOccurrences)).toBe(true);
+    }, 40_000);
+  });
 });
