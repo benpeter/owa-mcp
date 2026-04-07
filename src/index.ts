@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { TokenManager } from './auth.js';
 import { CalendarClient } from './calendar.js';
 import { MailClient } from './mail.js';
-import type { OwaCreateEventPayload, OwaUpdateEventPayload, RsvpAction, OwaRsvpPayload } from './types.js';
+import type { OwaCreateEventPayload, OwaUpdateEventPayload, RsvpAction, OwaRsvpPayload, OwaRecipient, OwaUpdateMailPayload } from './types.js';
 
 const tokenManager = new TokenManager();
 const calendarClient = new CalendarClient(tokenManager);
@@ -304,6 +304,194 @@ server.tool(
   async ({ messageId, attachmentId }) => {
     const result = await mailClient.getAttachment(messageId, attachmentId);
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+const recipientSchema = z.object({
+  email: z.string().describe('Email address'),
+  name: z.string().optional().describe('Display name'),
+});
+
+function toOwaRecipients(arr: { email: string; name?: string }[]): OwaRecipient[] {
+  return arr.map(r => ({ EmailAddress: { Address: r.email, Name: r.name } }));
+}
+
+server.tool(
+  'send_email',
+  'Compose and send a new email in one step. For more control (edit before sending), use create_draft + update_draft + send_draft instead.',
+  {
+    to: z.array(recipientSchema).min(1).describe('Recipients'),
+    subject: z.string().describe('Email subject'),
+    body: z.string().describe('Email body content'),
+    bodyType: z.enum(['text', 'html']).optional().default('text')
+      .describe('Body format: "text" (default) or "html"'),
+    cc: z.array(recipientSchema).optional().describe('CC recipients'),
+    bcc: z.array(recipientSchema).optional().describe('BCC recipients'),
+    importance: z.enum(['Low', 'Normal', 'High']).optional().default('Normal'),
+    saveToSentItems: z.boolean().optional().default(true)
+      .describe('Save a copy in Sent Items (default true)'),
+  },
+  async (params) => {
+    await mailClient.sendMail({
+      Message: {
+        Subject: params.subject,
+        Body: { ContentType: params.bodyType === 'html' ? 'HTML' : 'Text', Content: params.body },
+        ToRecipients: toOwaRecipients(params.to),
+        CcRecipients: params.cc ? toOwaRecipients(params.cc) : undefined,
+        BccRecipients: params.bcc ? toOwaRecipients(params.bcc) : undefined,
+        Importance: params.importance,
+      },
+      SaveToSentItems: params.saveToSentItems,
+    });
+    return { content: [{ type: 'text', text: JSON.stringify({ sent: true }, null, 2) }] };
+  }
+);
+
+server.tool(
+  'create_draft',
+  'Create a new email draft (saved to Drafts folder). Use update_draft to modify, then send_draft to send.',
+  {
+    to: z.array(recipientSchema).min(1).describe('Recipients'),
+    subject: z.string().describe('Email subject'),
+    body: z.string().describe('Email body content'),
+    bodyType: z.enum(['text', 'html']).optional().default('text')
+      .describe('Body format: "text" (default) or "html"'),
+    cc: z.array(recipientSchema).optional().describe('CC recipients'),
+    bcc: z.array(recipientSchema).optional().describe('BCC recipients'),
+    importance: z.enum(['Low', 'Normal', 'High']).optional().default('Normal'),
+  },
+  async (params) => {
+    const draft = await mailClient.createDraft({
+      Subject: params.subject,
+      Body: { ContentType: params.bodyType === 'html' ? 'HTML' : 'Text', Content: params.body },
+      ToRecipients: toOwaRecipients(params.to),
+      CcRecipients: params.cc ? toOwaRecipients(params.cc) : undefined,
+      BccRecipients: params.bcc ? toOwaRecipients(params.bcc) : undefined,
+      Importance: params.importance,
+    });
+    return { content: [{ type: 'text', text: JSON.stringify(draft, null, 2) }] };
+  }
+);
+
+server.tool(
+  'create_reply_draft',
+  'Create a draft reply to the sender of a message. Returns the draft with pre-filled recipients, quoted body, and "RE:" subject. Use update_draft to modify, then send_draft to send.',
+  {
+    messageId: z.string().describe('Message ID from get_emails or search_emails'),
+  },
+  async ({ messageId }) => {
+    const draft = await mailClient.createReplyDraft(messageId);
+    return { content: [{ type: 'text', text: JSON.stringify(draft, null, 2) }] };
+  }
+);
+
+server.tool(
+  'create_reply_all_draft',
+  'Create a draft reply-all to all recipients of a message. Returns the draft with pre-filled recipients, quoted body, and "RE:" subject. Use update_draft to modify, then send_draft to send.',
+  {
+    messageId: z.string().describe('Message ID from get_emails or search_emails'),
+  },
+  async ({ messageId }) => {
+    const draft = await mailClient.createReplyAllDraft(messageId);
+    return { content: [{ type: 'text', text: JSON.stringify(draft, null, 2) }] };
+  }
+);
+
+server.tool(
+  'create_forward_draft',
+  'Create a draft forward of a message. Returns the draft with quoted body and "FW:" subject but no To recipients. Use update_draft to set recipients, then send_draft to send.',
+  {
+    messageId: z.string().describe('Message ID from get_emails or search_emails'),
+  },
+  async ({ messageId }) => {
+    const draft = await mailClient.createForwardDraft(messageId);
+    return { content: [{ type: 'text', text: JSON.stringify(draft, null, 2) }] };
+  }
+);
+
+server.tool(
+  'update_draft',
+  'Modify a draft message before sending. Can change subject, body, recipients, and importance. Use with create_draft, create_reply_draft, create_reply_all_draft, or create_forward_draft.',
+  {
+    messageId: z.string().describe('Draft message ID'),
+    subject: z.string().optional().describe('New subject'),
+    body: z.string().optional().describe('New body content'),
+    bodyType: z.enum(['text', 'html']).optional().describe('Body format'),
+    toRecipients: z.array(recipientSchema).optional().describe('Replace all To recipients'),
+    ccRecipients: z.array(recipientSchema).optional().describe('Replace all CC recipients'),
+    bccRecipients: z.array(recipientSchema).optional().describe('Replace all BCC recipients'),
+    importance: z.enum(['Low', 'Normal', 'High']).optional(),
+  },
+  async (params) => {
+    const payload: OwaUpdateMailPayload = {};
+    if (params.subject !== undefined) payload.Subject = params.subject;
+    if (params.body !== undefined) {
+      payload.Body = {
+        ContentType: params.bodyType === 'html' ? 'HTML' : 'Text',
+        Content: params.body,
+      };
+    }
+    if (params.toRecipients !== undefined) payload.ToRecipients = toOwaRecipients(params.toRecipients);
+    if (params.ccRecipients !== undefined) payload.CcRecipients = toOwaRecipients(params.ccRecipients);
+    if (params.bccRecipients !== undefined) payload.BccRecipients = toOwaRecipients(params.bccRecipients);
+    if (params.importance !== undefined) payload.Importance = params.importance;
+    const updated = await mailClient.updateMessage(params.messageId, payload);
+    return { content: [{ type: 'text', text: JSON.stringify(updated, null, 2) }] };
+  }
+);
+
+server.tool(
+  'send_draft',
+  'Send a draft message. The draft is moved from Drafts to Sent Items.',
+  {
+    messageId: z.string().describe('Draft message ID from create_draft, create_reply_draft, create_reply_all_draft, or create_forward_draft'),
+  },
+  async ({ messageId }) => {
+    await mailClient.sendDraft(messageId);
+    return { content: [{ type: 'text', text: JSON.stringify({ sent: true, messageId }, null, 2) }] };
+  }
+);
+
+server.tool(
+  'move_email',
+  'Move a message to a different folder. Returns the moved message (with updated ID).',
+  {
+    messageId: z.string().describe('Message ID'),
+    destinationId: z.string().describe('Destination folder ID or well-known name (Inbox, Drafts, SentItems, DeletedItems, Archive)'),
+  },
+  async ({ messageId, destinationId }) => {
+    const moved = await mailClient.moveMessage(messageId, destinationId);
+    return { content: [{ type: 'text', text: JSON.stringify(moved, null, 2) }] };
+  }
+);
+
+server.tool(
+  'delete_email',
+  'Delete a message (moves to Deleted Items).',
+  {
+    messageId: z.string().describe('Message ID'),
+  },
+  async ({ messageId }) => {
+    await mailClient.deleteMessage(messageId);
+    return { content: [{ type: 'text', text: JSON.stringify({ deleted: true, messageId }, null, 2) }] };
+  }
+);
+
+server.tool(
+  'update_email',
+  'Update email properties: mark as read/unread, flag/unflag.',
+  {
+    messageId: z.string().describe('Message ID'),
+    isRead: z.boolean().optional().describe('Set read (true) or unread (false)'),
+    flagStatus: z.enum(['NotFlagged', 'Flagged', 'Complete']).optional()
+      .describe('Flag status'),
+  },
+  async (params) => {
+    const payload: OwaUpdateMailPayload = {};
+    if (params.isRead !== undefined) payload.IsRead = params.isRead;
+    if (params.flagStatus !== undefined) payload.Flag = { FlagStatus: params.flagStatus };
+    const updated = await mailClient.updateMessage(params.messageId, payload);
+    return { content: [{ type: 'text', text: JSON.stringify(updated, null, 2) }] };
   }
 );
 

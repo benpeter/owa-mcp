@@ -13,6 +13,8 @@ import type {
   OwaMailAttachment,
   OwaMailFolderListResponse,
   OwaMailListResponse,
+  OwaSendMailPayload,
+  OwaUpdateMailPayload,
 } from './types.js';
 
 const OWA_BASE = 'https://outlook.office.com/api/v2.0';
@@ -157,6 +159,56 @@ export class MailClient {
     const messages = data.value.map(m => this.normaliseMessage(m));
 
     return { messages };
+  }
+
+  async sendMail(payload: OwaSendMailPayload): Promise<void> {
+    await this.request('POST', '/me/sendmail', { body: payload });
+  }
+
+  async createDraft(payload: OwaSendMailPayload['Message']): Promise<MailMessage> {
+    const res = await this.request('POST', '/me/messages', { body: payload });
+    const raw = (await res.json()) as OwaMailMessage;
+    return this.normaliseMessage(raw);
+  }
+
+  async createReplyDraft(messageId: string): Promise<MailMessage> {
+    const res = await this.request('POST', `/me/messages/${messageId}/createreply`, { body: {} });
+    const raw = (await res.json()) as OwaMailMessage;
+    return this.normaliseMessage(raw);
+  }
+
+  async createReplyAllDraft(messageId: string): Promise<MailMessage> {
+    const res = await this.request('POST', `/me/messages/${messageId}/createreplyall`, { body: {} });
+    const raw = (await res.json()) as OwaMailMessage;
+    return this.normaliseMessage(raw);
+  }
+
+  async createForwardDraft(messageId: string): Promise<MailMessage> {
+    const res = await this.request('POST', `/me/messages/${messageId}/createforward`, { body: {} });
+    const raw = (await res.json()) as OwaMailMessage;
+    return this.normaliseMessage(raw);
+  }
+
+  async updateMessage(messageId: string, payload: OwaUpdateMailPayload): Promise<MailMessage> {
+    const res = await this.request('PATCH', `/me/messages/${messageId}`, { body: payload });
+    const raw = (await res.json()) as OwaMailMessage;
+    return this.normaliseMessage(raw);
+  }
+
+  async sendDraft(messageId: string): Promise<void> {
+    await this.request('POST', `/me/messages/${messageId}/send`, { body: {} });
+  }
+
+  async moveMessage(messageId: string, destinationId: string): Promise<MailMessage> {
+    const res = await this.request('POST', `/me/messages/${messageId}/move`, {
+      body: { DestinationId: destinationId },
+    });
+    const raw = (await res.json()) as OwaMailMessage;
+    return this.normaliseMessage(raw);
+  }
+
+  async deleteMessage(messageId: string): Promise<void> {
+    await this.request('DELETE', `/me/messages/${messageId}`);
   }
 
   private buildPresetFilter(filter: string): string | undefined {

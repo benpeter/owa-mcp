@@ -82,6 +82,35 @@ export interface OwaRsvpPayload {
   };
 }
 
+// ── Mail write types ────────────────────────────────────────
+
+export interface OwaRecipient {
+  EmailAddress: { Address: string; Name?: string };
+}
+
+export interface OwaSendMailPayload {
+  Message: {
+    Subject: string;
+    Body: { ContentType: 'HTML' | 'Text'; Content: string };
+    ToRecipients: OwaRecipient[];
+    CcRecipients?: OwaRecipient[];
+    BccRecipients?: OwaRecipient[];
+    Importance?: 'Low' | 'Normal' | 'High';
+  };
+  SaveToSentItems?: boolean;
+}
+
+export interface OwaUpdateMailPayload {
+  Subject?: string;
+  Body?: { ContentType: 'HTML' | 'Text'; Content: string };
+  ToRecipients?: OwaRecipient[];
+  CcRecipients?: OwaRecipient[];
+  BccRecipients?: OwaRecipient[];
+  Importance?: 'Low' | 'Normal' | 'High';
+  IsRead?: boolean;
+  Flag?: { FlagStatus: 'NotFlagged' | 'Flagged' | 'Complete' };
+}
+
 // ── Mail types ──────────────────────────────────────────────
 
 export interface MailFolder {

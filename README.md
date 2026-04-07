@@ -1,12 +1,12 @@
 # owa-mcp
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that gives Claude Code full access to your Microsoft Outlook calendar — **without requiring an Azure app registration**.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that gives Claude Code full access to your Microsoft Outlook calendar and email — **without requiring an Azure app registration**.
 
 ## How it works
 
 Microsoft Outlook Web (outlook.office.com) runs inside a Playwright-controlled headless Microsoft Edge browser that uses your existing, signed-in Edge profile. When Outlook Web loads, it issues Bearer tokens for its own internal API calls. This server intercepts those tokens and reuses them against the `outlook.office.com/api/v2.0` REST endpoint.
 
-The result: full `Calendars.ReadWrite` scope with no OAuth app registration, no client ID, and no IT involvement — as long as you are already signed in to Microsoft 365 in your Edge browser.
+The result: full `Calendars.ReadWrite` and `Mail.ReadWrite` scope with no OAuth app registration, no client ID, and no IT involvement — as long as you are already signed in to Microsoft 365 in your Edge browser.
 
 **Tokens expire after ~80 minutes.** The server refreshes automatically by re-launching the headless browser in the background.
 
@@ -126,11 +126,169 @@ Track an event on your calendar without RSVPing. Shows as Free, organizer not no
 | `eventId` | string | yes | Event ID |
 | `timezone` | string | no | Timezone for returned event |
 
+### `list_mail_folders`
+
+List all mail folders in the mailbox, or child folders of a specific folder.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `parentFolderId` | string | no | List children of this folder. If omitted, lists top-level folders |
+
+### `get_emails`
+
+Get emails from a specific mailbox folder with optional filtering.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `folderId` | string | no | Folder ID or well-known name (Inbox, Drafts, SentItems, DeletedItems). Default: Inbox |
+| `filter` | string | no | `all`, `unread`, `flagged`, `today`, `this_week` |
+| `limit` | number | no | Max results (default 20, max 500) |
+| `pageToken` | string | no | Pagination token from previous response |
+
+### `search_emails`
+
+Search emails using full-text query OR structured filters (mutually exclusive).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | no | Full-text search query. Cannot combine with structured filters |
+| `from` | string | no | Filter by sender email |
+| `subject` | string | no | Filter by subject (contains) |
+| `receivedAfter` | string | no | ISO 8601 datetime |
+| `receivedBefore` | string | no | ISO 8601 datetime |
+| `folderId` | string | no | Scope search to folder |
+| `limit` | number | no | Max results (default 20, max 500) |
+
+### `get_email`
+
+Read a single email with full body content and attachment metadata.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | yes | Message ID |
+| `format` | string | no | `text` (default) or `html` |
+
+### `get_attachment`
+
+Download an email attachment to disk.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | yes | Message ID |
+| `attachmentId` | string | yes | Attachment ID from get_email response |
+
+### `send_email`
+
+Compose and send a new email in one step. For more control, use `create_draft` + `update_draft` + `send_draft`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `to` | array | yes | `[{ email, name? }]` |
+| `subject` | string | yes | Subject line |
+| `body` | string | yes | Body content |
+| `bodyType` | string | no | `text` (default) or `html` |
+| `cc` | array | no | CC recipients `[{ email, name? }]` |
+| `bcc` | array | no | BCC recipients |
+| `importance` | string | no | Low, Normal (default), High |
+| `saveToSentItems` | boolean | no | Save to Sent Items (default true) |
+
+### `create_draft`
+
+Create a new email draft saved to Drafts folder.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `to` | array | yes | `[{ email, name? }]` |
+| `subject` | string | yes | Subject line |
+| `body` | string | yes | Body content |
+| `bodyType` | string | no | `text` (default) or `html` |
+| `cc` | array | no | CC recipients |
+| `bcc` | array | no | BCC recipients |
+| `importance` | string | no | Low, Normal (default), High |
+
+### `create_reply_draft`
+
+Create a draft reply to the sender. Returns draft with pre-filled recipients, quoted body, "RE:" subject.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | yes | Message ID |
+
+### `create_reply_all_draft`
+
+Create a draft reply-all. Returns draft with all original recipients, quoted body, "RE:" subject.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | yes | Message ID |
+
+### `create_forward_draft`
+
+Create a draft forward. Returns draft with quoted body, "FW:" subject, no To recipients.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | yes | Message ID |
+
+### `update_draft`
+
+Modify a draft before sending. Can change subject, body, recipients, importance.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | yes | Draft message ID |
+| `subject` | string | no | New subject |
+| `body` | string | no | New body content |
+| `bodyType` | string | no | `text` or `html` |
+| `toRecipients` | array | no | Replace all To recipients |
+| `ccRecipients` | array | no | Replace all CC recipients |
+| `bccRecipients` | array | no | Replace all BCC recipients |
+| `importance` | string | no | Low, Normal, High |
+
+### `send_draft`
+
+Send a draft message. Moves from Drafts to Sent Items.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | yes | Draft message ID |
+
+### `move_email`
+
+Move a message to a different folder. Returns the moved message (with updated ID).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | yes | Message ID |
+| `destinationId` | string | yes | Folder ID or well-known name (Inbox, Drafts, SentItems, DeletedItems, Archive) |
+
+### `delete_email`
+
+Delete a message (moves to Deleted Items).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | yes | Message ID |
+
+### `update_email`
+
+Update email properties: mark as read/unread, flag/unflag.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `messageId` | string | yes | Message ID |
+| `isRead` | boolean | no | Set read (true) or unread (false) |
+| `flagStatus` | string | no | `NotFlagged`, `Flagged`, or `Complete` |
+
 Example prompts:
 - *"What meetings do I have next week?"*
 - *"Create a 30-minute meeting with Jane tomorrow at 2pm"*
 - *"Decline the ECCN sync with a note that I'm on vacation"*
 - *"Follow the Analytics Tech Call so I can see it on my calendar"*
+- *"Show me unread emails from today"*
+- *"Reply to that email from Sarah and add Bob to CC"*
+- *"Forward the Q3 report to the finance team"*
+- *"Mark all emails from the newsletter as read"*
 
 ## Troubleshooting
 
@@ -142,17 +300,6 @@ The intercepted token didn't carry calendar scope. This is rare; try quitting al
 
 **Headless browser opens a visible window**
 This shouldn't happen normally. If it does, check that no other Playwright process is holding the Edge profile directory lock.
-
-## Roadmap
-
-- [x] `create_calendar_event`
-- [x] `update_calendar_event`
-- [x] `cancel_calendar_event` (with reason)
-- [x] `respond_to_calendar_event` (accept / tentative / decline)
-- [x] `follow_calendar_event`
-- [x] `delete_calendar_event`
-- [ ] `get_emails` (Mail.ReadWrite scope is already present in the token)
-- [ ] `send_email`
 
 ## License
 

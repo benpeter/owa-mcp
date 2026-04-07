@@ -24,7 +24,7 @@ The solution: Edge is already signed in to M365 and satisfies all Conditional Ac
 | `src/auth.ts` | `TokenManager` — launches headless Edge, intercepts token, caches with expiry |
 | `src/calendar.ts` | `CalendarClient` — calls `outlook.office.com/api/v2.0/me/calendarview` |
 | `src/mail.ts` | `MailClient` — calls `outlook.office.com/api/v2.0` mail endpoints |
-| `src/types.ts` | Shared types: `OwaToken`, `CalendarEvent`, `OwaCalendarViewResponse` |
+| `src/types.ts` | Shared types: `OwaToken`, `CalendarEvent`, `MailMessage`, payload interfaces |
 | `src/index.ts` | MCP server, tool registration via `@modelcontextprotocol/sdk` |
 
 ## Development
@@ -40,7 +40,7 @@ Tests are integration tests — they need a live Edge session. There are no unit
 
 ## Adding new tools
 
-1. Add any new API methods to `src/calendar.ts` (or create `src/mail.ts`, `src/contacts.ts`, etc.)
+1. Add any new API methods to `src/calendar.ts`, `src/mail.ts`, or create new domain clients (e.g., `src/contacts.ts`)
 2. Register the tool in `src/index.ts` using `server.tool(name, description, zodSchema, handler)`
 3. Add an integration test in `tests/`
 
@@ -53,7 +53,7 @@ The OWA REST API base is `https://outlook.office.com/api/v2.0`. It mirrors the M
 This project uses **two different OWA API surfaces**:
 
 ### 1. REST API (`outlook.office.com/api/v2.0`)
-Standard REST endpoints for CRUD operations. Used by `get_calendar_events`, `create_calendar_event`, `update_calendar_event`, `cancel_calendar_event`, `delete_calendar_event`. Event IDs are in EwsId/RestId format (base64url, start with `AAMkA`).
+Standard REST endpoints for CRUD operations. Used by calendar tools (`get_calendar_events`, `create_calendar_event`, `update_calendar_event`, `cancel_calendar_event`, `delete_calendar_event`) and all mail tools (`get_emails`, `search_emails`, `get_email`, `send_email`, `create_draft`, `create_reply_draft`, `create_reply_all_draft`, `create_forward_draft`, `update_draft`, `send_draft`, `move_email`, `delete_email`, `update_email`). Event IDs are in EwsId/RestId format (base64url, start with `AAMkA`).
 
 ### 2. OWA service.svc (`outlook.office.com/owa/service.svc`)
 Internal OWA endpoint used by the Outlook Web client. Payload goes in the `x-owa-urlpostdata` header (URL-encoded JSON), not the request body (content-length=0). Used for `follow_calendar_event` and will be used for `respond_to_calendar_event`.
