@@ -221,6 +221,42 @@ export class CalendarClient {
     return this.normalise(raw);
   }
 
+  /**
+   * Resolve any event ID to its series master ID.
+   * Returns the event's own ID if it is already a series master.
+   * Throws if the event is a singleInstance (not part of a series).
+   */
+  async resolveSeriesMasterId(eventId: string): Promise<string> {
+    const res = await this.request('GET', `/me/events/${eventId}?$select=Id,Type,SeriesMasterId`);
+    const raw = (await res.json()) as { Id: string; Type: string; SeriesMasterId: string | null };
+    const type = raw.Type?.toLowerCase();
+
+    if (type === 'singleinstance') {
+      throw new Error('This event is not part of a recurring series');
+    }
+    if (type === 'seriesmaster') {
+      return raw.Id;
+    }
+    // occurrence or exception
+    if (!raw.SeriesMasterId) {
+      throw new Error(`Event ${eventId} is ${type} but has no SeriesMasterId`);
+    }
+    return raw.SeriesMasterId;
+  }
+
+  /**
+   * Fetch the series master event and return its current recurrence pattern.
+   * Used by thisAndFollowing scope to construct the PATCH payload.
+   */
+  async getSeriesRecurrence(seriesMasterId: string): Promise<{ recurrence: unknown; event: OwaCalendarEvent }> {
+    const res = await this.request('GET', `/me/events/${seriesMasterId}?$select=Id,Subject,Start,End,Recurrence,Type,IsAllDay,Organizer,Location,IsOnlineMeeting,ShowAs,Sensitivity,BodyPreview,SeriesMasterId`);
+    const raw = (await res.json()) as OwaCalendarEvent & { Recurrence: unknown };
+    if (!raw.Recurrence) {
+      throw new Error(`Series master ${seriesMasterId} has no Recurrence`);
+    }
+    return { recurrence: raw.Recurrence, event: raw };
+  }
+
   /** Translate a REST API event ID to the format service.svc expects. */
   private async toServiceId(restId: string, token: string): Promise<string> {
     const res = await fetch(`${OWA_BASE.replace('/v2.0', '/beta')}/me/translateExchangeIds`, {
