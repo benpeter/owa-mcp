@@ -161,4 +161,120 @@ describe('CalendarClient series operations', () => {
       }
     }, 40_000);
   });
+
+  describe('series cancel/delete operations', () => {
+    let seriesEventId: string;
+
+    afterEach(async () => {
+      // Clean up any test series that wasn't already deleted
+      if (seriesEventId) {
+        try { await client.deleteEvent(seriesEventId, 'allInSeries'); } catch { /* ignore */ }
+        seriesEventId = '';
+      }
+    });
+
+    async function createTestSeries(): Promise<CalendarEvent> {
+      const startDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const startStr = startDate.toISOString().replace('Z', '').split('.')[0];
+      const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
+      const endStr = endDate.toISOString().replace('Z', '').split('.')[0];
+
+      // Create a weekly recurring event for 5 weeks
+      const payload: OwaCreateEventPayload = {
+        Subject: `owa-mcp series test ${Date.now()}`,
+        Start: { DateTime: startStr, TimeZone: 'UTC' },
+        End: { DateTime: endStr, TimeZone: 'UTC' },
+        ShowAs: 'Free',
+        Sensitivity: 'Private',
+        Recurrence: {
+          Pattern: {
+            Type: 'Weekly',
+            Interval: 1,
+            DaysOfWeek: [startDate.toLocaleDateString('en-US', { weekday: 'long' })],
+            FirstDayOfWeek: 'Sunday',
+          },
+          Range: {
+            Type: 'Numbered',
+            StartDate: startStr.split('T')[0],
+            NumberOfOccurrences: 5,
+          },
+        },
+      };
+      const event = await client.createEvent(payload);
+      seriesEventId = event.id;
+      return event;
+    }
+
+    test('cancel allInSeries removes the entire series', async () => {
+      const created = await createTestSeries();
+
+      // Cancel all
+      await client.cancelEvent(created.id, 'Test cleanup', 'allInSeries');
+
+      // Verify: listing instances over the next 60 days should return nothing or throw
+      const rangeStart = new Date();
+      const rangeEnd = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+
+      try {
+        const instances = await client.listSeriesInstances(
+          created.id,
+          rangeStart.toISOString(),
+          rangeEnd.toISOString()
+        );
+        // If we get results, they should be empty (series was cancelled)
+        expect(instances.length).toBe(0);
+      } catch (err) {
+        // API may return 404 for cancelled series — that's also acceptable
+        expect(String(err)).toMatch(/404|not found|ErrorItemNotFound/i);
+      }
+      seriesEventId = ''; // Already cleaned up via cancel
+    }, 60_000);
+
+    test('delete allInSeries removes the entire series', async () => {
+      const created = await createTestSeries();
+
+      await client.deleteEvent(created.id, 'allInSeries');
+
+      const rangeStart = new Date();
+      const rangeEnd = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+
+      try {
+        const instances = await client.listSeriesInstances(
+          created.id,
+          rangeStart.toISOString(),
+          rangeEnd.toISOString()
+        );
+        expect(instances.length).toBe(0);
+      } catch (err) {
+        expect(String(err)).toMatch(/404|not found|ErrorItemNotFound/i);
+      }
+      seriesEventId = ''; // Already cleaned up
+    }, 60_000);
+
+    test('thisAndFollowing truncates the series', async () => {
+      const created = await createTestSeries();
+
+      // List instances to find the third occurrence
+      const rangeStart = new Date();
+      const rangeEnd = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+      const instances = await client.listSeriesInstances(
+        created.id,
+        rangeStart.toISOString(),
+        rangeEnd.toISOString()
+      );
+      expect(instances.length).toBe(5);
+
+      // Cancel from the 3rd occurrence onward
+      const thirdInstance = instances[2];
+      await client.cancelEvent(thirdInstance.id, undefined, 'thisAndFollowing');
+
+      // Re-list: should now have only 2 instances
+      const afterInstances = await client.listSeriesInstances(
+        created.id,
+        rangeStart.toISOString(),
+        rangeEnd.toISOString()
+      );
+      expect(afterInstances.length).toBe(2);
+    }, 60_000);
+  });
 });
