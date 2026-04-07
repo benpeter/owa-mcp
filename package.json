@@ -1,6 +1,6 @@
 {
   "name": "owa-mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "MCP server for Microsoft Outlook calendar and email via Playwright Edge session interception",
   "author": "Ben Peter <bp@ben-peter.com>",
   "license": "Apache-2.0",
