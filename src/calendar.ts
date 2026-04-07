@@ -72,14 +72,97 @@ export class CalendarClient {
     return this.normalise(raw);
   }
 
-  async cancelEvent(eventId: string, comment?: string): Promise<void> {
-    await this.request('POST', `/me/events/${eventId}/cancel`, {
-      body: comment ? { Comment: comment } : {},
+  async cancelEvent(eventId: string, comment?: string, scope: 'single' | 'thisAndFollowing' | 'allInSeries' = 'single'): Promise<void> {
+    if (scope === 'single') {
+      await this.request('POST', `/me/events/${eventId}/cancel`, {
+        body: comment ? { Comment: comment } : {},
+      });
+      return;
+    }
+
+    if (scope === 'allInSeries') {
+      const masterId = await this.resolveSeriesMasterId(eventId);
+      await this.request('POST', `/me/events/${masterId}/cancel`, {
+        body: comment ? { Comment: comment } : {},
+      });
+      return;
+    }
+
+    // thisAndFollowing: truncate the series recurrence range
+    const masterId = await this.resolveSeriesMasterId(eventId);
+
+    // Get the occurrence's start date to compute the new end date
+    const occRes = await this.request('GET', `/me/events/${eventId}?$select=Start,Type`);
+    const occ = (await occRes.json()) as { Start: { DateTime: string }; Type: string };
+    if (occ.Type?.toLowerCase() === 'seriesmaster') {
+      throw new Error('Cannot use thisAndFollowing on the series master itself — use allInSeries instead');
+    }
+
+    // Fetch current recurrence from the master
+    const { recurrence } = await this.getSeriesRecurrence(masterId);
+    const rec = recurrence as { Pattern: Record<string, unknown>; Range: Record<string, unknown> };
+
+    // New end date = occurrence start date minus one day (date-only, no timezone conversion)
+    const occDate = occ.Start.DateTime.split('T')[0]; // "2026-04-15"
+    const endDate = new Date(occDate + 'T00:00:00Z');
+    endDate.setUTCDate(endDate.getUTCDate() - 1);
+    const newEndDate = endDate.toISOString().split('T')[0]; // "2026-04-14"
+
+    await this.request('PATCH', `/me/events/${masterId}`, {
+      body: {
+        Recurrence: {
+          Pattern: rec.Pattern,
+          Range: {
+            ...rec.Range,
+            Type: 'EndDate',
+            EndDate: newEndDate,
+          },
+        },
+      },
     });
   }
 
-  async deleteEvent(eventId: string): Promise<void> {
-    await this.request('DELETE', `/me/events/${eventId}`);
+  async deleteEvent(eventId: string, scope: 'single' | 'thisAndFollowing' | 'allInSeries' = 'single'): Promise<void> {
+    if (scope === 'single') {
+      await this.request('DELETE', `/me/events/${eventId}`);
+      return;
+    }
+
+    if (scope === 'allInSeries') {
+      const masterId = await this.resolveSeriesMasterId(eventId);
+      await this.request('DELETE', `/me/events/${masterId}`);
+      return;
+    }
+
+    // thisAndFollowing: same truncation approach as cancelEvent
+    const masterId = await this.resolveSeriesMasterId(eventId);
+
+    const occRes = await this.request('GET', `/me/events/${eventId}?$select=Start,Type`);
+    const occ = (await occRes.json()) as { Start: { DateTime: string }; Type: string };
+    if (occ.Type?.toLowerCase() === 'seriesmaster') {
+      throw new Error('Cannot use thisAndFollowing on the series master itself — use allInSeries instead');
+    }
+
+    const { recurrence } = await this.getSeriesRecurrence(masterId);
+    const rec = recurrence as { Pattern: Record<string, unknown>; Range: Record<string, unknown> };
+
+    const occDate = occ.Start.DateTime.split('T')[0];
+    const endDate = new Date(occDate + 'T00:00:00Z');
+    endDate.setUTCDate(endDate.getUTCDate() - 1);
+    const newEndDate = endDate.toISOString().split('T')[0];
+
+    await this.request('PATCH', `/me/events/${masterId}`, {
+      body: {
+        Recurrence: {
+          Pattern: rec.Pattern,
+          Range: {
+            ...rec.Range,
+            Type: 'EndDate',
+            EndDate: newEndDate,
+          },
+        },
+      },
+    });
   }
 
   async respondToEvent(

@@ -150,10 +150,12 @@ server.tool(
   {
     eventId: z.string().describe('Event ID from get_calendar_events'),
     reason: z.string().optional().describe('Cancellation reason sent to attendees'),
+    scope: z.enum(['single', 'thisAndFollowing', 'allInSeries']).optional().default('single')
+      .describe('Scope of cancellation: "single" (default) cancels this occurrence only, "thisAndFollowing" cancels this and all future occurrences, "allInSeries" cancels the entire series'),
   },
-  async ({ eventId, reason }) => {
-    await calendarClient.cancelEvent(eventId, reason);
-    return { content: [{ type: 'text', text: JSON.stringify({ cancelled: true, eventId, reason: reason ?? null }, null, 2) }] };
+  async ({ eventId, reason, scope }) => {
+    await calendarClient.cancelEvent(eventId, reason, scope);
+    return { content: [{ type: 'text', text: JSON.stringify({ cancelled: true, eventId, scope, reason: reason ?? null }, null, 2) }] };
   }
 );
 
@@ -162,10 +164,12 @@ server.tool(
   'Remove an event from your calendar without sending any notification. Use this to remove events you did not organize, or to silently delete your own events.',
   {
     eventId: z.string().describe('Event ID from get_calendar_events'),
+    scope: z.enum(['single', 'thisAndFollowing', 'allInSeries']).optional().default('single')
+      .describe('Scope of deletion: "single" (default) deletes this occurrence only, "thisAndFollowing" deletes this and all future occurrences, "allInSeries" deletes the entire series'),
   },
-  async ({ eventId }) => {
-    await calendarClient.deleteEvent(eventId);
-    return { content: [{ type: 'text', text: JSON.stringify({ deleted: true, eventId }, null, 2) }] };
+  async ({ eventId, scope }) => {
+    await calendarClient.deleteEvent(eventId, scope);
+    return { content: [{ type: 'text', text: JSON.stringify({ deleted: true, eventId, scope }, null, 2) }] };
   }
 );
 
