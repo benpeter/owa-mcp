@@ -73,23 +73,7 @@ export class CalendarClient {
   }
 
   async cancelEvent(eventId: string, comment?: string, scope: 'single' | 'thisAndFollowing' | 'allInSeries' = 'single'): Promise<void> {
-    if (scope === 'single') {
-      await this.request('POST', `/me/events/${eventId}/cancel`, {
-        body: comment ? { Comment: comment } : {},
-      });
-      return;
-    }
-
-    if (scope === 'allInSeries') {
-      const masterId = await this.resolveSeriesMasterId(eventId);
-      await this.request('POST', `/me/events/${masterId}/cancel`, {
-        body: comment ? { Comment: comment } : {},
-      });
-      return;
-    }
-
-    // thisAndFollowing: truncate the series recurrence range
-    await this.truncateSeriesAt(eventId);
+    await this.cancelEventViaSvc(eventId, comment, scope);
   }
 
   async deleteEvent(eventId: string, scope: 'single' | 'thisAndFollowing' | 'allInSeries' = 'single'): Promise<void> {
@@ -278,6 +262,69 @@ export class CalendarClient {
         },
       },
     });
+  }
+
+  /**
+   * Cancel an event via OWA's native CancelCalendarEvent service.svc action.
+   * Sends cancellation notices to attendees for all scopes including thisAndFollowing.
+   * EventScope: 0 = single, 1 = allInSeries, 2 = thisAndFollowing.
+   */
+  private async cancelEventViaSvc(
+    eventId: string,
+    comment?: string,
+    scope: 'single' | 'thisAndFollowing' | 'allInSeries' = 'single'
+  ): Promise<void> {
+    const scopeMap: Record<string, number> = {
+      single: 0,
+      allInSeries: 1,
+      thisAndFollowing: 2,
+    };
+
+    const token = await this.tokens.getToken();
+    const svcEventId = await this.toServiceId(eventId, token.value);
+
+    const payload = {
+      __type: 'CancelCalendarEventJsonRequest:#Exchange',
+      Header: {
+        __type: 'JsonRequestHeaders:#Exchange',
+        RequestServerVersion: 'V2018_01_08',
+        TimeZoneContext: {
+          __type: 'TimeZoneContext:#Exchange',
+          TimeZoneDefinition: {
+            __type: 'TimeZoneDefinitionType:#Exchange',
+            Id: 'W. Europe Standard Time',
+          },
+        },
+      },
+      Body: {
+        __type: 'CancelCalendarEventRequest:#Exchange',
+        EventId: { __type: 'ItemId:#Exchange', Id: svcEventId },
+        EventScope: scopeMap[scope],
+        ClientSupportsIrm: true,
+        Notes: {
+          __type: 'BodyContentType:#Exchange',
+          BodyType: 'HTML',
+          Value: comment ? `<div>${comment}</div>` : '<div><br></div>',
+        },
+      },
+    };
+
+    const res = await fetch(`${OWA_SVC}?action=CancelCalendarEvent`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token.value}`,
+        'Content-Type': 'application/json; charset=utf-8',
+        action: 'CancelCalendarEvent',
+        'x-owa-urlpostdata': encodeURIComponent(JSON.stringify(payload)),
+        'x-req-source': 'Calendar',
+        Prefer: 'IdType="ImmutableId"',
+      },
+    });
+
+    const body = (await res.json()) as { Body: { ResponseCode: string; MessageText?: string } };
+    if (body.Body.ResponseCode !== 'NoError') {
+      throw new Error(`CancelCalendarEvent failed: ${body.Body.ResponseCode} — ${body.Body.MessageText ?? ''}`);
+    }
   }
 
   /**
