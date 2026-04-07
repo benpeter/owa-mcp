@@ -8,6 +8,7 @@ import type {
   OwaUpdateEventPayload,
   RsvpAction,
   OwaRsvpPayload,
+  RecurrenceInfo,
 } from './types.js';
 
 const OWA_BASE = 'https://outlook.office.com/api/v2.0';
@@ -31,7 +32,7 @@ export class CalendarClient {
     const params = new URLSearchParams({
       startDateTime,
       endDateTime,
-      '$select': 'Id,Subject,Start,End,IsAllDay,Organizer,Location,IsOnlineMeeting,ShowAs,Recurrence,Sensitivity,BodyPreview',
+      '$select': 'Id,Subject,Start,End,IsAllDay,Organizer,Location,IsOnlineMeeting,ShowAs,Recurrence,Sensitivity,BodyPreview,Type,SeriesMasterId',
       '$top': String(Math.min(maxResults, 100)),
       '$orderby': 'Start/DateTime asc',
     });
@@ -274,6 +275,11 @@ export class CalendarClient {
   }
 
   private normalise(raw: OwaCalendarEvent): CalendarEvent {
+    const type = (raw.Type?.toLowerCase() ?? 'singleInstance') as CalendarEvent['type'];
+    const recurrence = raw.Recurrence
+      ? this.normaliseRecurrence(raw.Recurrence)
+      : null;
+
     return {
       id: raw.Id,
       subject: raw.Subject,
@@ -284,9 +290,47 @@ export class CalendarClient {
       location: raw.Location?.DisplayName ?? '',
       isOnlineMeeting: raw.IsOnlineMeeting,
       showAs: raw.ShowAs,
-      isRecurring: raw.Recurrence !== null,
+      isRecurring: type !== 'singleInstance',
       isPrivate: raw.Sensitivity === 'Private',
       bodyPreview: raw.BodyPreview ?? '',
+      type,
+      seriesMasterId: raw.SeriesMasterId ?? null,
+      recurrence,
+    };
+  }
+
+  private normaliseRecurrence(raw: unknown): RecurrenceInfo | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const rec = raw as Record<string, unknown>;
+    const pattern = rec.Pattern as Record<string, unknown> | undefined;
+    const range = rec.Range as Record<string, unknown> | undefined;
+    if (!pattern || !range) return null;
+
+    return {
+      pattern: {
+        type: String(pattern.Type ?? '').toLowerCase(),
+        interval: Number(pattern.Interval ?? 1),
+        daysOfWeek: Array.isArray(pattern.DaysOfWeek)
+          ? pattern.DaysOfWeek.map((d: unknown) => String(d).toLowerCase())
+          : undefined,
+        dayOfMonth: pattern.DayOfMonth != null ? Number(pattern.DayOfMonth) : undefined,
+        month: pattern.Month != null ? Number(pattern.Month) : undefined,
+        index: pattern.Index != null ? String(pattern.Index).toLowerCase() : undefined,
+        firstDayOfWeek: pattern.FirstDayOfWeek != null
+          ? String(pattern.FirstDayOfWeek).toLowerCase()
+          : undefined,
+      },
+      range: {
+        type: String(range.Type ?? '').toLowerCase(),
+        startDate: String(range.StartDate ?? ''),
+        endDate: range.EndDate != null ? String(range.EndDate) : undefined,
+        numberOfOccurrences: range.NumberOfOccurrences != null
+          ? Number(range.NumberOfOccurrences)
+          : undefined,
+        recurrenceTimeZone: range.RecurrenceTimeZone != null
+          ? String(range.RecurrenceTimeZone)
+          : undefined,
+      },
     };
   }
 }
