@@ -251,7 +251,7 @@ describe('CalendarClient series operations', () => {
       seriesEventId = ''; // Already cleaned up
     }, 60_000);
 
-    test('thisAndFollowing truncates the series', async () => {
+    test('thisAndFollowing cancels from occurrence onward with comment', async () => {
       const created = await createTestSeries();
 
       // List instances to find the third occurrence
@@ -264,9 +264,9 @@ describe('CalendarClient series operations', () => {
       );
       expect(instances.length).toBe(5);
 
-      // Cancel from the 3rd occurrence onward
+      // Cancel from the 3rd occurrence onward WITH a comment
       const thirdInstance = instances[2];
-      await client.cancelEvent(thirdInstance.id, undefined, 'thisAndFollowing');
+      await client.cancelEvent(thirdInstance.id, 'Integration test cleanup', 'thisAndFollowing');
 
       // Re-list: should now have only 2 instances
       const afterInstances = await client.listSeriesInstances(
