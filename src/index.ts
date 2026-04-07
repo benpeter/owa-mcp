@@ -16,7 +16,7 @@ const mailClient = new MailClient(tokenManager);
 
 const server = new McpServer({
   name: 'owa-mcp',
-  version: '0.4.0',
+  version: '0.4.1',
 });
 
 const recurrencePatternSchema = z.object({
