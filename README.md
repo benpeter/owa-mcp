@@ -74,6 +74,7 @@ Create a new event. Adding attendees auto-sends invitations.
 | `hideAttendees` | boolean | no | Hide attendee list from other attendees (default false) |
 | `responseRequested` | boolean | no | Request RSVPs from attendees (default true) |
 | `reminderMinutes` | number | no | Reminder minutes before start. Omit for Outlook default, 0 to disable |
+| `recurrence` | object | no | Make this a recurring event. See [Recurrence](#recurrence-object) below |
 
 ### `update_calendar_event`
 
@@ -93,6 +94,7 @@ Update fields on an existing event. Only include fields to change.
 | `hideAttendees` | boolean | no | Hide attendee list from other attendees |
 | `responseRequested` | boolean | no | Request RSVPs from attendees |
 | `reminderMinutes` | number | no | Reminder minutes before start. 0 to disable |
+| `recurrence` | object | no | Change the recurrence pattern. Only applies to series master events. See [Recurrence](#recurrence-object) below |
 
 ### `cancel_calendar_event`
 
@@ -133,6 +135,7 @@ Track an event on your calendar without RSVPing. Shows as Free, organizer not no
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `eventId` | string | yes | Event ID |
+| `comment` | string | no | Optional message included in the follow notification to the organizer |
 | `timezone` | string | no | Timezone for returned event |
 
 ### `get_series_master`
@@ -316,10 +319,54 @@ Example prompts:
 - *"Follow the Analytics Tech Call so I can see it on my calendar"*
 - *"Cancel all future occurrences of the weekly sync starting from next week"*
 - *"What's the recurrence pattern for the Monday standup?"*
+- *"Create a weekly team sync every Tuesday at 10am for the next 3 months"*
 - *"Show me unread emails from today"*
 - *"Reply to that email from Sarah and add Bob to CC"*
 - *"Forward the Q3 report to the finance team"*
 - *"Mark all emails from the newsletter as read"*
+
+## Recurrence Object
+
+Used by `create_calendar_event` and `update_calendar_event` to define recurring events.
+
+```json
+{
+  "recurrence": {
+    "pattern": {
+      "type": "weekly",
+      "interval": 1,
+      "daysOfWeek": ["Monday", "Wednesday", "Friday"]
+    },
+    "range": {
+      "type": "endDate",
+      "startDate": "2026-04-07",
+      "endDate": "2026-07-07"
+    }
+  }
+}
+```
+
+**Pattern types:** `daily`, `weekly`, `absoluteMonthly`, `relativeMonthly`, `absoluteYearly`, `relativeYearly`
+
+| Pattern Field | Type | Description |
+|---------------|------|-------------|
+| `type` | string | Required. Pattern type |
+| `interval` | number | Required. Interval between occurrences (1 = every, 2 = every other) |
+| `daysOfWeek` | string[] | Days for weekly/relative patterns |
+| `dayOfMonth` | number | Day of month for absoluteMonthly/absoluteYearly |
+| `month` | number | Month (1-12) for yearly patterns |
+| `index` | string | Week index for relative patterns: first, second, third, fourth, last |
+| `firstDayOfWeek` | string | First day of week (default Sunday) |
+
+**Range types:** `endDate`, `numbered`, `noEnd`
+
+| Range Field | Type | Description |
+|-------------|------|-------------|
+| `type` | string | Required. How the series ends |
+| `startDate` | string | Required. Series start (YYYY-MM-DD) |
+| `endDate` | string | End date (required for `endDate` type) |
+| `numberOfOccurrences` | number | Count (required for `numbered` type) |
+| `recurrenceTimeZone` | string | Timezone for recurrence dates |
 
 ## Troubleshooting
 

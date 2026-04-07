@@ -16,8 +16,61 @@ const mailClient = new MailClient(tokenManager);
 
 const server = new McpServer({
   name: 'owa-mcp',
-  version: '0.3.0',
+  version: '0.4.0',
 });
+
+const recurrencePatternSchema = z.object({
+  type: z.enum(['daily', 'weekly', 'absoluteMonthly', 'relativeMonthly', 'absoluteYearly', 'relativeYearly'])
+    .describe('Recurrence pattern type'),
+  interval: z.number().int().min(1).describe('Interval between occurrences (e.g. 1 = every week, 2 = every other week)'),
+  daysOfWeek: z.array(z.string()).optional()
+    .describe('Days for weekly/relative patterns: "Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"'),
+  dayOfMonth: z.number().int().min(1).max(31).optional()
+    .describe('Day of month for absoluteMonthly/absoluteYearly'),
+  month: z.number().int().min(1).max(12).optional()
+    .describe('Month (1-12) for yearly patterns'),
+  index: z.enum(['first', 'second', 'third', 'fourth', 'last']).optional()
+    .describe('Week index for relativeMonthly/relativeYearly'),
+  firstDayOfWeek: z.string().optional()
+    .describe('First day of the week (default "Sunday")'),
+});
+
+const recurrenceRangeSchema = z.object({
+  type: z.enum(['endDate', 'numbered', 'noEnd'])
+    .describe('"endDate" = recur until date, "numbered" = fixed count, "noEnd" = forever'),
+  startDate: z.string().describe('Series start date in YYYY-MM-DD format'),
+  endDate: z.string().optional().describe('End date (YYYY-MM-DD) — required when type is "endDate"'),
+  numberOfOccurrences: z.number().int().min(1).optional()
+    .describe('Number of occurrences — required when type is "numbered"'),
+  recurrenceTimeZone: z.string().optional()
+    .describe('Timezone for recurrence dates (e.g. "W. Europe Standard Time")'),
+});
+
+const recurrenceSchema = z.object({
+  pattern: recurrencePatternSchema,
+  range: recurrenceRangeSchema,
+}).describe('Recurrence definition with pattern (how often) and range (how long)');
+
+function toOwaRecurrence(rec: z.infer<typeof recurrenceSchema>): unknown {
+  return {
+    Pattern: {
+      Type: rec.pattern.type.charAt(0).toUpperCase() + rec.pattern.type.slice(1),
+      Interval: rec.pattern.interval,
+      ...(rec.pattern.daysOfWeek && { DaysOfWeek: rec.pattern.daysOfWeek }),
+      ...(rec.pattern.dayOfMonth !== undefined && { DayOfMonth: rec.pattern.dayOfMonth }),
+      ...(rec.pattern.month !== undefined && { Month: rec.pattern.month }),
+      ...(rec.pattern.index && { Index: rec.pattern.index.charAt(0).toUpperCase() + rec.pattern.index.slice(1) }),
+      ...(rec.pattern.firstDayOfWeek && { FirstDayOfWeek: rec.pattern.firstDayOfWeek }),
+    },
+    Range: {
+      Type: rec.range.type.charAt(0).toUpperCase() + rec.range.type.slice(1),
+      StartDate: rec.range.startDate,
+      ...(rec.range.endDate && { EndDate: rec.range.endDate }),
+      ...(rec.range.numberOfOccurrences !== undefined && { NumberOfOccurrences: rec.range.numberOfOccurrences }),
+      ...(rec.range.recurrenceTimeZone && { RecurrenceTimeZone: rec.range.recurrenceTimeZone }),
+    },
+  };
+}
 
 server.tool(
   'get_calendar_events',
@@ -82,8 +135,9 @@ server.tool(
       .describe('Request attendees to send a response. Set false to not request RSVPs'),
     reminderMinutes: z.number().int().min(0).optional()
       .describe('Reminder in minutes before event start (e.g. 15). Omit to use Outlook default. Set to 0 to disable reminder'),
-  },
-  async (params) => {
+    recurrence: recurrenceSchema.optional()
+      .describe('Make this a recurring event. Omit for a single event.'),
+  },  async (params) => {
     const payload: OwaCreateEventPayload = {
       Subject: params.subject,
       Start: { DateTime: params.startDateTime, TimeZone: params.timezone },
@@ -112,6 +166,9 @@ server.tool(
         Type: a.type ?? 'Required',
       }));
     }
+    if (params.recurrence) {
+      payload.Recurrence = toOwaRecurrence(params.recurrence);
+    }
     const event = await calendarClient.createEvent(payload, params.timezone);
     return { content: [{ type: 'text', text: JSON.stringify(event, null, 2) }] };
   }
@@ -137,6 +194,8 @@ server.tool(
       .describe('Request attendees to send a response'),
     reminderMinutes: z.number().int().min(0).optional()
       .describe('Reminder in minutes before event start. Set to 0 to disable reminder'),
+    recurrence: recurrenceSchema.optional()
+      .describe('Change the recurrence pattern. Only applies to series master events.'),
   },
   async (params) => {
     const payload: OwaUpdateEventPayload = {};
@@ -162,6 +221,9 @@ server.tool(
     if (params.reminderMinutes !== undefined) {
       payload.IsReminderOn = params.reminderMinutes > 0;
       payload.ReminderMinutesBeforeStart = params.reminderMinutes;
+    }
+    if (params.recurrence) {
+      payload.Recurrence = toOwaRecurrence(params.recurrence);
     }
     const event = await calendarClient.updateEvent(params.eventId, payload, params.timezone);
     return { content: [{ type: 'text', text: JSON.stringify(event, null, 2) }] };
