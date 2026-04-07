@@ -53,10 +53,10 @@ The OWA REST API base is `https://outlook.office.com/api/v2.0`. It mirrors the M
 This project uses **two different OWA API surfaces**:
 
 ### 1. REST API (`outlook.office.com/api/v2.0`)
-Standard REST endpoints for CRUD operations. Used by calendar tools (`get_calendar_events`, `create_calendar_event`, `update_calendar_event`, `cancel_calendar_event`, `delete_calendar_event`) and all mail tools (`get_emails`, `search_emails`, `get_email`, `send_email`, `create_draft`, `create_reply_draft`, `create_reply_all_draft`, `create_forward_draft`, `update_draft`, `send_draft`, `move_email`, `delete_email`, `update_email`). Event IDs are in EwsId/RestId format (base64url, start with `AAMkA`).
+Standard REST endpoints for CRUD operations. Used by calendar tools (`get_calendar_events`, `create_calendar_event`, `update_calendar_event`, `delete_calendar_event`) and all mail tools (`get_emails`, `search_emails`, `get_email`, `send_email`, `create_draft`, `create_reply_draft`, `create_reply_all_draft`, `create_forward_draft`, `update_draft`, `send_draft`, `move_email`, `delete_email`, `update_email`). Event IDs are in EwsId/RestId format (base64url, start with `AAMkA`).
 
 ### 2. OWA service.svc (`outlook.office.com/owa/service.svc`)
-Internal OWA endpoint used by the Outlook Web client. Payload goes in the `x-owa-urlpostdata` header (URL-encoded JSON), not the request body (content-length=0). Used for `follow_calendar_event` and will be used for `respond_to_calendar_event`.
+Internal OWA endpoint used by the Outlook Web client. Payload goes in the `x-owa-urlpostdata` header (URL-encoded JSON), not the request body (content-length=0). Used for `cancel_calendar_event` (all scopes), `follow_calendar_event`, and `respond_to_calendar_event`.
 
 **Key differences from REST API:**
 - Bypasses `ResponseRequested: false` — can RSVP to events where the REST API returns "organizer hasn't requested a response"

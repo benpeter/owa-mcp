@@ -232,7 +232,7 @@ server.tool(
 
 server.tool(
   'cancel_calendar_event',
-  'Cancel a meeting you organized. Sends a cancellation notice with your reason to all attendees. Only works if you are the organizer. Note: "thisAndFollowing" silently truncates the series without sending cancellation notices.',
+  'Cancel a meeting you organized. Sends a cancellation notice with your reason to all attendees. Only works if you are the organizer.',
   {
     eventId: z.string().describe('Event ID from get_calendar_events'),
     reason: z.string().optional().describe('Cancellation reason sent to attendees'),
