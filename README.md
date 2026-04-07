@@ -71,6 +71,9 @@ Create a new event. Adding attendees auto-sends invitations.
 | `isAllDay` | boolean | no | All-day event |
 | `showAs` | string | no | Free, Tentative, Busy, Oof, WorkingElsewhere |
 | `isOnlineMeeting` | boolean | no | Create as Teams meeting |
+| `hideAttendees` | boolean | no | Hide attendee list from other attendees (default false) |
+| `responseRequested` | boolean | no | Request RSVPs from attendees (default true) |
+| `reminderMinutes` | number | no | Reminder minutes before start. Omit for Outlook default, 0 to disable |
 
 ### `update_calendar_event`
 
@@ -86,23 +89,29 @@ Update fields on an existing event. Only include fields to change.
 | `body` | string | no | New body (caution: overwrites Teams join link) |
 | `location` | string | no | New location |
 | `showAs` | string | no | New show-as status |
+| `isPrivate` | boolean | no | Mark as private |
+| `hideAttendees` | boolean | no | Hide attendee list from other attendees |
+| `responseRequested` | boolean | no | Request RSVPs from attendees |
+| `reminderMinutes` | number | no | Reminder minutes before start. 0 to disable |
 
 ### `cancel_calendar_event`
 
-Cancel a meeting you organized. Sends cancellation with reason to attendees.
+Cancel a meeting you organized. Sends cancellation with reason to attendees. Supports recurring series operations.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `eventId` | string | yes | Event ID |
 | `reason` | string | no | Cancellation reason sent to attendees |
+| `scope` | string | no | `single` (default), `thisAndFollowing`, or `allInSeries` |
 
 ### `delete_calendar_event`
 
-Remove an event from your calendar silently (no notification sent).
+Remove an event from your calendar silently (no notification sent). Supports recurring series operations.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `eventId` | string | yes | Event ID |
+| `scope` | string | no | `single` (default), `thisAndFollowing`, or `allInSeries` |
 
 ### `respond_to_calendar_event`
 
@@ -125,6 +134,26 @@ Track an event on your calendar without RSVPing. Shows as Free, organizer not no
 |-----------|------|----------|-------------|
 | `eventId` | string | yes | Event ID |
 | `timezone` | string | no | Timezone for returned event |
+
+### `get_series_master`
+
+Inspect the master event of a recurring series. Returns recurrence pattern, cancelled occurrences, and full event details. Accepts any event ID from the series.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `eventId` | string | yes | Any event ID from the series (resolved automatically) |
+| `timezone` | string | no | IANA timezone (default UTC) |
+
+### `list_series_instances`
+
+List all occurrences of a recurring series within a date range. Accepts any event ID from the series.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `eventId` | string | yes | Any event ID from the series (resolved automatically) |
+| `startDateTime` | string | yes | ISO 8601 start |
+| `endDateTime` | string | yes | ISO 8601 end |
+| `timezone` | string | no | IANA timezone (default UTC) |
 
 ### `list_mail_folders`
 
@@ -285,6 +314,8 @@ Example prompts:
 - *"Create a 30-minute meeting with Jane tomorrow at 2pm"*
 - *"Decline the ECCN sync with a note that I'm on vacation"*
 - *"Follow the Analytics Tech Call so I can see it on my calendar"*
+- *"Cancel all future occurrences of the weekly sync starting from next week"*
+- *"What's the recurrence pattern for the Monday standup?"*
 - *"Show me unread emails from today"*
 - *"Reply to that email from Sarah and add Bob to CC"*
 - *"Forward the Q3 report to the finance team"*
