@@ -89,37 +89,7 @@ export class CalendarClient {
     }
 
     // thisAndFollowing: truncate the series recurrence range
-    const masterId = await this.resolveSeriesMasterId(eventId);
-
-    // Get the occurrence's start date to compute the new end date
-    const occRes = await this.request('GET', `/me/events/${eventId}?$select=Start,Type`);
-    const occ = (await occRes.json()) as { Start: { DateTime: string }; Type: string };
-    if (occ.Type?.toLowerCase() === 'seriesmaster') {
-      throw new Error('Cannot use thisAndFollowing on the series master itself — use allInSeries instead');
-    }
-
-    // Fetch current recurrence from the master
-    const { recurrence } = await this.getSeriesRecurrence(masterId);
-    const rec = recurrence as { Pattern: Record<string, unknown>; Range: Record<string, unknown> };
-
-    // New end date = occurrence start date minus one day (date-only, no timezone conversion)
-    const occDate = occ.Start.DateTime.split('T')[0]; // "2026-04-15"
-    const endDate = new Date(occDate + 'T00:00:00Z');
-    endDate.setUTCDate(endDate.getUTCDate() - 1);
-    const newEndDate = endDate.toISOString().split('T')[0]; // "2026-04-14"
-
-    await this.request('PATCH', `/me/events/${masterId}`, {
-      body: {
-        Recurrence: {
-          Pattern: rec.Pattern,
-          Range: {
-            ...rec.Range,
-            Type: 'EndDate',
-            EndDate: newEndDate,
-          },
-        },
-      },
-    });
+    await this.truncateSeriesAt(eventId);
   }
 
   async deleteEvent(eventId: string, scope: 'single' | 'thisAndFollowing' | 'allInSeries' = 'single'): Promise<void> {
@@ -135,34 +105,7 @@ export class CalendarClient {
     }
 
     // thisAndFollowing: same truncation approach as cancelEvent
-    const masterId = await this.resolveSeriesMasterId(eventId);
-
-    const occRes = await this.request('GET', `/me/events/${eventId}?$select=Start,Type`);
-    const occ = (await occRes.json()) as { Start: { DateTime: string }; Type: string };
-    if (occ.Type?.toLowerCase() === 'seriesmaster') {
-      throw new Error('Cannot use thisAndFollowing on the series master itself — use allInSeries instead');
-    }
-
-    const { recurrence } = await this.getSeriesRecurrence(masterId);
-    const rec = recurrence as { Pattern: Record<string, unknown>; Range: Record<string, unknown> };
-
-    const occDate = occ.Start.DateTime.split('T')[0];
-    const endDate = new Date(occDate + 'T00:00:00Z');
-    endDate.setUTCDate(endDate.getUTCDate() - 1);
-    const newEndDate = endDate.toISOString().split('T')[0];
-
-    await this.request('PATCH', `/me/events/${masterId}`, {
-      body: {
-        Recurrence: {
-          Pattern: rec.Pattern,
-          Range: {
-            ...rec.Range,
-            Type: 'EndDate',
-            EndDate: newEndDate,
-          },
-        },
-      },
-    });
+    await this.truncateSeriesAt(eventId);
   }
 
   async respondToEvent(
@@ -305,6 +248,39 @@ export class CalendarClient {
   }
 
   /**
+   * Truncate a recurring series so that occurrences from the given event onward are removed.
+   * PATCHes the series master's Recurrence.Range.EndDate to one day before the occurrence.
+   * Note: PATCH truncation does NOT send cancellation notices to attendees.
+   */
+  private async truncateSeriesAt(occurrenceId: string): Promise<void> {
+    const masterId = await this.resolveSeriesMasterId(occurrenceId);
+
+    const occRes = await this.request('GET', `/me/events/${occurrenceId}?$select=Start,Type`);
+    const occ = (await occRes.json()) as { Start: { DateTime: string }; Type: string };
+    if (occ.Type?.toLowerCase() === 'seriesmaster') {
+      throw new Error('Cannot use thisAndFollowing on the series master itself — use allInSeries instead');
+    }
+
+    const { recurrence } = await this.getSeriesRecurrence(masterId);
+    const rec = recurrence as { Pattern: Record<string, unknown>; Range: Record<string, unknown> };
+
+    // New end date = occurrence start date minus one day (date-only, no timezone conversion)
+    const occDate = occ.Start.DateTime.split('T')[0];
+    const endDate = new Date(occDate + 'T00:00:00Z');
+    endDate.setUTCDate(endDate.getUTCDate() - 1);
+    const newEndDate = endDate.toISOString().split('T')[0];
+
+    await this.request('PATCH', `/me/events/${masterId}`, {
+      body: {
+        Recurrence: {
+          Pattern: rec.Pattern,
+          Range: { ...rec.Range, Type: 'EndDate', EndDate: newEndDate },
+        },
+      },
+    });
+  }
+
+  /**
    * Resolve any event ID to its series master ID.
    * Returns the event's own ID if it is already a series master.
    * Throws if the event is a singleInstance (not part of a series).
@@ -331,7 +307,7 @@ export class CalendarClient {
    * Fetch the series master event and return its current recurrence pattern.
    * Used by thisAndFollowing scope to construct the PATCH payload.
    */
-  async getSeriesRecurrence(seriesMasterId: string): Promise<{ recurrence: unknown; event: OwaCalendarEvent }> {
+  private async getSeriesRecurrence(seriesMasterId: string): Promise<{ recurrence: unknown; event: OwaCalendarEvent }> {
     const res = await this.request('GET', `/me/events/${seriesMasterId}?$select=Id,Subject,Start,End,Recurrence,Type,IsAllDay,Organizer,Location,IsOnlineMeeting,ShowAs,Sensitivity,BodyPreview,SeriesMasterId`);
     const raw = (await res.json()) as OwaCalendarEvent & { Recurrence: unknown };
     if (!raw.Recurrence) {
@@ -375,7 +351,11 @@ export class CalendarClient {
     timezone?: string
   ): Promise<CalendarEvent[]> {
     const masterId = await this.resolveSeriesMasterId(eventId);
-    const params = new URLSearchParams({ startDateTime, endDateTime });
+    const params = new URLSearchParams({
+      startDateTime,
+      endDateTime,
+      '$select': 'Id,Subject,Start,End,IsAllDay,Organizer,Location,IsOnlineMeeting,ShowAs,Recurrence,Sensitivity,BodyPreview,Type,SeriesMasterId',
+    });
     const res = await this.request('GET',
       `/me/events/${masterId}/instances?${params}`,
       { timezone }
@@ -438,7 +418,13 @@ export class CalendarClient {
   }
 
   private normalise(raw: OwaCalendarEvent): CalendarEvent {
-    const type = (raw.Type?.toLowerCase() ?? 'singleInstance') as CalendarEvent['type'];
+    const typeMap: Record<string, CalendarEvent['type']> = {
+      SingleInstance: 'singleInstance',
+      Occurrence: 'occurrence',
+      Exception: 'exception',
+      SeriesMaster: 'seriesMaster',
+    };
+    const type = typeMap[raw.Type] ?? 'singleInstance';
     const recurrence = raw.Recurrence
       ? this.normaliseRecurrence(raw.Recurrence)
       : null;

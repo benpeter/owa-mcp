@@ -121,7 +121,7 @@ describe('CalendarClient series operations', () => {
       }
 
       const master = await client.getSeriesMaster(occurrence.id);
-      expect(master.type).toBe('seriesmaster');
+      expect(master.type).toBe('seriesMaster');
       expect(master.id).toBe(occurrence.seriesMasterId);
       expect(master.recurrence).not.toBeNull();
       expect(master.recurrence!.pattern).toHaveProperty('type');
