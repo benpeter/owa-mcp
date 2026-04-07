@@ -75,6 +75,20 @@ x-owa-urlpostdata: { Body: { Response: "Tentative", Attendance: 3, Mode: 3, Send
 - Recurring occurrences: `SendResponse: true` (organizer gets "is following" notification, subject prefixed "Following:")
 - Single-instance events: `SendResponse: false` (no notification, but subject still prefixed "Following:")
 
+## Releasing
+
+This package is published on npm as `owa-mcp`. A GitHub Actions workflow (`.github/workflows/publish.yml`) automates publishing on tag push using **npm Trusted Publishers** (OIDC — no token required):
+
+1. **Bump version** in `package.json` (semver: patch for fixes, minor for new tools, major for breaking changes)
+2. **Commit** the version bump: `git commit -am "chore: bump version to 0.X.0"`
+3. **Tag** with `v` prefix: `git tag v0.X.0` (tag must match package.json version with `v` prefix)
+4. **Push commit and tag**: `git push origin main --tags`
+5. **Automated** (GitHub Actions): builds, publishes to npm via OIDC (no NPM_TOKEN needed), generates provenance attestation, creates a GitHub release with auto-generated notes
+
+**npm auth**: Uses Trusted Publishers — GitHub Actions authenticates to npm via OIDC. No secrets to manage or rotate. Configured on npmjs.com → package settings → Publishing access → Trusted publishers. The `id-token: write` permission is required in the workflow.
+
+When using `/autoresearch:ship`, select the `code-release` type (not "direct commit") to trigger the full release flow. A direct commit to main is for intermediate work; a release is for publishable milestones.
+
 ## Known limitations
 
 - macOS only (Edge profile path is hardcoded to Mac location)
