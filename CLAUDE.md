@@ -2,26 +2,29 @@
 
 ## What this project is
 
-An MCP server that exposes Microsoft Outlook calendar and email data to Claude Code. It works by intercepting Bearer tokens that Outlook Web (outlook.office.com) emits when loaded in a headless Playwright-controlled Microsoft Edge browser using the user's existing Edge profile.
+An MCP server that exposes Microsoft Outlook calendar and email data to Claude Code. It works by intercepting Bearer tokens that Outlook Web (outlook.office.com) emits when loaded in a Chrome browser automated via [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp), using a dedicated persistent Chrome profile.
 
 ## Why this architecture exists
 
 The standard approach — registering an Azure app and using the Microsoft Graph API — requires IT admin consent in enterprise Microsoft 365 tenants with Conditional Access policies. Azure CLI authentication is also blocked on managed devices by those same policies.
 
-The solution: Edge is already signed in to M365 and satisfies all Conditional Access requirements. Playwright launches Edge headlessly using the real profile directory (`~/Library/Application Support/Microsoft Edge`). Outlook Web makes API calls using Bearer tokens issued by Microsoft's own OWA app (`appid: 9199bf20-a13f-4107-85dc-02114787ef48`). Those tokens carry extensive delegated scopes including `Calendars.ReadWrite`, `Mail.ReadWrite`, `Files.ReadWrite.All`, and more. The server intercepts them via `page.on('request')` and reuses them against `https://outlook.office.com/api/v2.0`.
+The solution: a real Chrome browser signed in to M365 satisfies all Conditional Access requirements. `src/auth.ts` drives Chrome as an MCP client — it spawns `npx chrome-devtools-mcp@latest` via `@modelcontextprotocol/sdk`'s `Client` + `StdioClientTransport` and calls its tools (`navigate_page`, `list_network_requests`, `get_network_request`) to observe the browser. chrome-devtools-mcp is a hard prerequisite: there is no fallback, and if it fails to start the server throws an error telling the user to verify it with `npx chrome-devtools-mcp@latest --version` and confirm Chrome is installed. The browser runs against a dedicated, persistent Chrome profile at `~/Library/Application Support/owa-mcp/chrome-profile`, kept separate from the user's daily-driver Chrome and from any chrome-devtools-mcp instance Claude Code itself might have open — this avoids user-data-dir lock conflicts. It is not headless, so a visible window is available whenever the user needs to sign in, and it is not `--isolated`, so login cookies persist across restarts. Outlook Web makes API calls using Bearer tokens issued by Microsoft's own OWA app (`appid: 9199bf20-a13f-4107-85dc-02114787ef48`). Those tokens carry extensive delegated scopes including `Calendars.ReadWrite`, `Mail.ReadWrite`, `Files.ReadWrite.All`, and more. The server extracts them from network requests captured via chrome-devtools-mcp and reuses them against `https://outlook.office.com/api/v2.0`.
+
+Microsoft Edge is no longer used anywhere in this project.
 
 ## Token details
 
-- Intercepted from requests to `outlook.office.com/owa/service.svc`
+- Intercepted from requests whose path starts with `/owa/service.svc`, on any hostname in an explicit allowlist (`outlook.office.com`, `outlook.office365.com`, `outlook.cloud.microsoft`) — checked via `new URL()` with an exact hostname match, not a substring, since a page reached during interactive sign-in could otherwise spoof the path on an attacker-controlled domain. The hostname isn't hardcoded to one value because `outlook.office.com/calendar/view/...` 302-redirects to `outlook.cloud.microsoft` for some tenants (Microsoft's ongoing domain consolidation) — if Microsoft adds another domain, extend `OWA_TOKEN_HOSTS` in `src/auth.ts`, don't loosen the match.
 - Lifetime: ~80 minutes (tracked via JWT `exp` claim)
 - Auto-refreshed 5 minutes before expiry
 - Scope confirmed in production: `Calendars.ReadWrite`, `Mail.ReadWrite`, `Contacts.ReadWrite`, `Files.ReadWrite.All`, `Chat.Read`, and ~60 more
+- The chrome-devtools-mcp connection and its underlying browser are kept alive across token acquisitions rather than launched fresh each time (`TokenManager.close()` tears down the connection and browser). The Chrome window is visible (never headless) from the moment the browser first starts — not just on failure. If no matching request shows up within 60s of navigating (polled every 5s), the server throws, telling the user to sign in in that already-open window and retry — because the connection stays alive, the retry reuses the same browser/page instead of opening a new window, so sign-in (including MFA) can be completed at the user's own pace across multiple retries.
 
 ## Key files
 
 | File | Purpose |
 |------|---------|
-| `src/auth.ts` | `TokenManager` — launches headless Edge, intercepts token, caches with expiry |
+| `src/auth.ts` | `TokenManager` — drives Chrome via chrome-devtools-mcp, extracts the Bearer token from network requests, caches with expiry |
 | `src/calendar.ts` | `CalendarClient` — calls `outlook.office.com/api/v2.0/me/calendarview` |
 | `src/mail.ts` | `MailClient` — calls `outlook.office.com/api/v2.0` mail endpoints |
 | `src/types.ts` | Shared types: `OwaToken`, `CalendarEvent`, `MailMessage`, payload interfaces |
@@ -33,10 +36,12 @@ The solution: Edge is already signed in to M365 and satisfies all Conditional Ac
 npm install
 npm run dev          # run with tsx (no build needed)
 npm run build        # compile to dist/
-npm test             # integration tests (require Edge + M365 session)
+npm test             # integration tests (require chrome-devtools-mcp + a live M365 session)
 ```
 
-Tests are integration tests — they need a live Edge session. There are no unit tests with mocks because the auth flow is inherently side-effectful.
+Tests are integration tests — they need a live M365 session in the chrome-devtools-mcp-driven Chrome profile. There are no unit tests with mocks because the auth flow is inherently side-effectful.
+
+`npm test` runs Jest with `--runInBand`. Each test file gets its own `TokenManager`, and Jest runs files in separate worker processes by default — without `--runInBand`, multiple chrome-devtools-mcp instances launch concurrently against the same dedicated profile directory and lock each other out, causing every file but the first to spuriously fail with "no active session found."
 
 ## Adding new tools
 
@@ -91,7 +96,7 @@ When using `/autoresearch:ship`, select the `code-release` type (not "direct com
 
 ## Known limitations
 
-- macOS only (Edge profile path is hardcoded to Mac location)
-- Requires Edge installed at `/Applications/Microsoft Edge.app`
-- Token acquisition takes ~8–10 seconds on cold start (headless browser launch)
-- If the Edge session expires (usually after weeks of inactivity), the user must sign in to outlook.office.com in Edge again
+- macOS only (the Chrome profile path, `~/Library/Application Support/owa-mcp/chrome-profile`, is hardcoded to a Mac location)
+- Requires chrome-devtools-mcp to be runnable via `npx chrome-devtools-mcp@latest` and Chrome to be installed — there is no fallback if either is unavailable
+- Token acquisition takes ~8–10 seconds on cold start (chrome-devtools-mcp spawn + browser launch); subsequent acquisitions reuse the already-running browser and are faster
+- If the M365 session in the dedicated Chrome profile expires (usually after weeks of inactivity), the user must sign in to outlook.office.com in the already-open automation Chrome window, then retry the request

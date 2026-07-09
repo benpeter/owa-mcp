@@ -1,8 +1,10 @@
 // tests/auth.test.ts
 import { TokenManager } from '../src/auth.js';
 
-// Integration test — requires Microsoft Edge installed at default path
-// and an active M365 session in the Edge profile.
+// Integration test — requires chrome-devtools-mcp to be available via npx,
+// Chrome to be installed, and an active (or completable) Microsoft 365
+// session in the dedicated automation Chrome profile at
+// ~/Library/Application Support/owa-mcp/chrome-profile.
 // Run manually: npm test -- --testPathPattern=auth
 
 describe('TokenManager', () => {
@@ -21,7 +23,7 @@ describe('TokenManager', () => {
     expect(token.value).toMatch(/^eyJ/);           // JWT starts with eyJ
     expect(token.expiresAt).toBeGreaterThan(Date.now());
     expect(token.expiresAt - token.issuedAt).toBeGreaterThan(60 * 60 * 1000); // >1hr
-  }, 30_000);
+  }, 150_000); // chrome-devtools-mcp startup (45s) + navigate_page (30s) + session poll (60s)
 
   test('returns cached token on second call', async () => {
     const t1 = await manager.getToken();

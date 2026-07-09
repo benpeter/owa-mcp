@@ -4,21 +4,22 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that gi
 
 ## How it works
 
-Microsoft Outlook Web (outlook.office.com) runs inside a Playwright-controlled headless Microsoft Edge browser that uses your existing, signed-in Edge profile. When Outlook Web loads, it issues Bearer tokens for its own internal API calls. This server intercepts those tokens and reuses them against the `outlook.office.com/api/v2.0` REST endpoint.
+The server drives a dedicated, persistent Google Chrome browser via [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp), using its own Chrome profile (kept separate from your daily-driver Chrome) so the login session survives across restarts. It navigates that browser to Outlook Web (outlook.office.com) and watches the network requests it makes. When Outlook Web loads, it issues Bearer tokens for its own internal API calls; this server intercepts those tokens and reuses them against the `outlook.office.com/api/v2.0` REST endpoint.
 
-The result: full `Calendars.ReadWrite` and `Mail.ReadWrite` scope with no OAuth app registration, no client ID, and no IT involvement — as long as you are already signed in to Microsoft 365 in your Edge browser.
+The result: full `Calendars.ReadWrite` and `Mail.ReadWrite` scope with no OAuth app registration, no client ID, and no IT involvement — as long as you can sign in to Microsoft 365 in the automation browser.
 
-**Tokens expire after ~80 minutes.** The server refreshes automatically by re-launching the headless browser in the background.
+**Tokens expire after ~80 minutes.** Rather than relaunching a browser for every refresh, the server keeps a single chrome-devtools-mcp connection (and its browser) alive across acquisitions and simply re-navigates to Outlook Web to trigger a fresh token request. The Chrome window is visible (never headless) from the moment the browser first starts, so it's there for you to sign in whenever needed. If no active session is found within 60 seconds, the request fails with a message asking you to sign in and retry — because the connection stays alive, you can take as long as you need (MFA included) and just retry once done, without losing the browser session.
 
 ## Why this approach
 
-Many enterprise Microsoft 365 tenants enforce Conditional Access policies that block third-party OAuth flows (e.g., Azure CLI, custom app registrations). Managed devices may restrict which apps can authenticate. The browser-session interception approach works because it piggybacks on an authentication flow that already satisfies all policy requirements — the same one used by Outlook Web itself.
+Many enterprise Microsoft 365 tenants enforce Conditional Access policies that block third-party OAuth flows (e.g., Azure CLI, custom app registrations) on managed devices. The browser-session interception approach works because it piggybacks on an authentication flow that already satisfies those policy requirements — the same one used by Outlook Web itself. This has been confirmed working with Chrome SSO in at least one Conditional-Access-enforced corp environment; whether it works in yours depends on your organization's specific policies.
 
 ## Prerequisites
 
 - macOS (tested on macOS 15)
-- [Microsoft Edge](https://www.microsoft.com/en-us/edge) installed at `/Applications/Microsoft Edge.app`
-- Signed in to Microsoft 365 in Edge (open Edge, go to outlook.office.com, confirm you see your calendar)
+- [Google Chrome](https://www.google.com/chrome/) installed
+- [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp) available via `npx` — verify with `npx chrome-devtools-mcp@latest --version`; the server spawns it automatically on first use, no manual setup needed
+- Signed in to Microsoft 365 (the first token request opens a visible Chrome window — sign in there if prompted)
 - Node.js 20+
 
 ## Installation
@@ -370,14 +371,11 @@ Used by `create_calendar_event` and `update_calendar_event` to define recurring 
 
 ## Troubleshooting
 
-**Token acquisition times out**
-Open Edge, navigate to outlook.office.com, confirm you can see your calendar. The session may have expired — sign in again.
+**Token acquisition times out / no active session found**
+The automation Chrome window is already open (it becomes visible as soon as the browser starts, not just on timeout) and has navigated to Outlook Web. Switch to it and sign in there (MFA included) at your own pace, then simply retry the request — the browser connection is kept alive, so the same session is reused and you won't need to sign in again on subsequent calls.
 
 **`ErrorAccessDenied` on calendar API**
-The intercepted token didn't carry calendar scope. This is rare; try quitting all Edge windows and restarting.
-
-**Headless browser opens a visible window**
-This shouldn't happen normally. If it does, check that no other Playwright process is holding the Edge profile directory lock.
+The intercepted token didn't carry calendar scope. This is rare; try quitting any Chrome windows using the automation profile (`~/Library/Application Support/owa-mcp/chrome-profile`) and retrying — the server will relaunch it automatically.
 
 ## License
 

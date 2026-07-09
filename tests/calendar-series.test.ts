@@ -28,7 +28,7 @@ describe('CalendarClient series operations', () => {
         expect(event).toHaveProperty('seriesMasterId');
         expect(event).toHaveProperty('recurrence');
       }
-    }, 40_000);
+    }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
     test('recurring occurrences have seriesMasterId set', async () => {
       const start = new Date();
@@ -44,7 +44,7 @@ describe('CalendarClient series operations', () => {
         expect(occ.seriesMasterId).toBeTruthy();
         expect(occ.isRecurring).toBe(true);
       }
-    }, 40_000);
+    }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
     test('single instances have null seriesMasterId and null recurrence', async () => {
       const start = new Date();
@@ -61,7 +61,7 @@ describe('CalendarClient series operations', () => {
         expect(s.recurrence).toBeNull();
         expect(s.isRecurring).toBe(false);
       }
-    }, 40_000);
+    }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
   });
 
   describe('resolveSeriesMasterId', () => {
@@ -78,7 +78,7 @@ describe('CalendarClient series operations', () => {
       const masterId = await client.resolveSeriesMasterId(occurrence.id);
       expect(masterId).toBeTruthy();
       expect(masterId).toBe(occurrence.seriesMasterId);
-    }, 40_000);
+    }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
     test('returns own ID for series master', async () => {
       const start = new Date();
@@ -92,7 +92,7 @@ describe('CalendarClient series operations', () => {
 
       const masterId = await client.resolveSeriesMasterId(occurrence.seriesMasterId!);
       expect(masterId).toBe(occurrence.seriesMasterId);
-    }, 40_000);
+    }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
     test('throws for single instance events', async () => {
       const start = new Date();
@@ -106,7 +106,7 @@ describe('CalendarClient series operations', () => {
 
       await expect(client.resolveSeriesMasterId(single.id))
         .rejects.toThrow('not part of a recurring series');
-    }, 40_000);
+    }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
   });
 
   describe('getSeriesMaster', () => {
@@ -130,7 +130,7 @@ describe('CalendarClient series operations', () => {
       expect(master.recurrence!.range).toHaveProperty('startDate');
       expect(master).toHaveProperty('cancelledOccurrences');
       expect(Array.isArray(master.cancelledOccurrences)).toBe(true);
-    }, 40_000);
+    }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
   });
 
   describe('listSeriesInstances', () => {
@@ -159,7 +159,7 @@ describe('CalendarClient series operations', () => {
         expect(['occurrence', 'exception']).toContain(inst.type);
         expect(inst.seriesMasterId).toBe(occurrence.seriesMasterId);
       }
-    }, 40_000);
+    }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
   });
 
   describe('series cancel/delete operations', () => {
@@ -228,7 +228,7 @@ describe('CalendarClient series operations', () => {
         expect(String(err)).toMatch(/404|not found|ErrorItemNotFound/i);
       }
       seriesEventId = ''; // Already cleaned up via cancel
-    }, 60_000);
+    }, 150_000);
 
     test('delete allInSeries removes the entire series', async () => {
       const created = await createTestSeries();
@@ -249,7 +249,7 @@ describe('CalendarClient series operations', () => {
         expect(String(err)).toMatch(/404|not found|ErrorItemNotFound/i);
       }
       seriesEventId = ''; // Already cleaned up
-    }, 60_000);
+    }, 150_000);
 
     test('thisAndFollowing cancels from occurrence onward with comment', async () => {
       const created = await createTestSeries();
@@ -275,6 +275,6 @@ describe('CalendarClient series operations', () => {
         rangeEnd.toISOString()
       );
       expect(afterInstances.length).toBe(2);
-    }, 60_000);
+    }, 150_000);
   });
 });

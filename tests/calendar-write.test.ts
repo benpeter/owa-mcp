@@ -39,7 +39,7 @@ describe('CalendarClient write operations', () => {
     expect(event.showAs).toBe('Free');
     expect(event.isPrivate).toBe(true);
     createdEventId = event.id;
-  }, 40_000);
+  }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
   test('updates the event', async () => {
     const event = await client.updateEvent(createdEventId, {
@@ -48,7 +48,7 @@ describe('CalendarClient write operations', () => {
     });
     expect(event.subject).toBe('owa-mcp updated test event');
     expect(event.showAs).toBe('Busy');
-  }, 20_000);
+  }, 150_000);
 
   test('RSVPs to the event via service.svc with REST fallback', async () => {
     // respondToEvent tries service.svc first (bypasses ResponseRequested: false),
@@ -70,10 +70,10 @@ describe('CalendarClient write operations', () => {
     await client.respondToEvent(createdEventId, 'accept', {
       SendResponse: false,
     });
-  }, 40_000);
+  }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
   test('deletes the event', async () => {
     await client.deleteEvent(createdEventId);
     createdEventId = '';
-  }, 20_000);
+  }, 150_000);
 });

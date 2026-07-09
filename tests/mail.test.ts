@@ -26,7 +26,7 @@ describe('MailClient', () => {
     expect(typeof inbox!.unreadCount).toBe('number');
     expect(typeof inbox!.totalCount).toBe('number');
     expect(typeof inbox!.childFolderCount).toBe('number');
-  }, 40_000);
+  }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
   test('getMessages returns messages from Inbox', async () => {
     const result = await client.getMessages('Inbox', { limit: 5 });
@@ -45,7 +45,7 @@ describe('MailClient', () => {
     expect(typeof msg.hasAttachments).toBe('boolean');
     expect(typeof msg.bodyPreview).toBe('string');
     expect(msg.body).toBeUndefined();
-  }, 40_000);
+  }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
   test('getMessages with unread filter returns only unread', async () => {
     const result = await client.getMessages('Inbox', { filter: 'unread', limit: 5 });
@@ -54,7 +54,7 @@ describe('MailClient', () => {
     for (const msg of result.messages) {
       expect(msg.isRead).toBe(false);
     }
-  }, 40_000);
+  }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
   test('searchMessages with query returns results', async () => {
     const result = await client.searchMessages({ query: 'meeting', limit: 5 });
@@ -66,7 +66,7 @@ describe('MailClient', () => {
       expect(typeof msg.id).toBe('string');
       expect(typeof msg.subject).toBe('string');
     }
-  }, 40_000);
+  }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
   test('searchMessages with structured filters', async () => {
     const result = await client.searchMessages({
@@ -75,13 +75,13 @@ describe('MailClient', () => {
     });
 
     expect(Array.isArray(result.messages)).toBe(true);
-  }, 40_000);
+  }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
   test('searchMessages throws when query and filters both provided', async () => {
     await expect(
       client.searchMessages({ query: 'hello', from: 'test@example.com' })
     ).rejects.toThrow('Cannot combine');
-  }, 40_000);
+  }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
   test('getMessage returns full message with text body', async () => {
     // Get a message ID from Inbox first
@@ -96,7 +96,7 @@ describe('MailClient', () => {
     expect(msg.bodyType).toBe('text');
     expect(typeof msg.subject).toBe('string');
     expect(typeof msg.from).toBe('string');
-  }, 40_000);
+  }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
   test('getMessage returns HTML body when requested', async () => {
     const list = await client.getMessages('Inbox', { limit: 1 });
@@ -108,7 +108,7 @@ describe('MailClient', () => {
     expect(msg.id).toBe(messageId);
     expect(typeof msg.body).toBe('string');
     expect(msg.bodyType).toBe('html');
-  }, 40_000);
+  }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 
   test('getAttachment downloads file to disk', async () => {
     // Find a message with attachments by fetching recent messages and filtering client-side
@@ -138,5 +138,5 @@ describe('MailClient', () => {
 
     // Cleanup
     fs.unlinkSync(downloaded.filePath);
-  }, 40_000);
+  }, 150_000); // first getToken() call may need a cold chrome-devtools-mcp launch
 });
