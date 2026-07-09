@@ -3,6 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import path from 'path';
 import os from 'os';
+import fs from 'fs';
 import type { OwaToken } from './types.js';
 
 // Dedicated, persistent Chrome profile for owa-mcp's automation browser.
@@ -108,6 +109,39 @@ export class TokenManager {
   }
 
   /**
+   * If a prior process died without a clean shutdown (crash, forced kill,
+   * OOM), Chrome's SingletonLock can outlive it and permanently block every
+   * future launch against this profile with a confusing "no session found"
+   * failure — nothing about a locked profile is visible from the outside.
+   * Chrome itself doesn't reliably self-heal this, so check whether the PID
+   * the lock points to is still alive and clear it if not.
+   */
+  private clearStaleLock(): void {
+    const lockPath = path.join(PROFILE_DIR, 'SingletonLock');
+    let target: string;
+    try {
+      target = fs.readlinkSync(lockPath);
+    } catch {
+      return; // no lock, or not a symlink — nothing to do
+    }
+    const pid = Number(target.split('-').pop());
+    if (!pid) return;
+    try {
+      process.kill(pid, 0); // throws if not running; doesn't actually signal
+      return; // still alive — real lock, leave it alone
+    } catch {
+      // stale — the owning process is gone
+    }
+    for (const name of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+      try {
+        fs.unlinkSync(path.join(PROFILE_DIR, name));
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  /**
    * chrome-devtools-mcp is a hard prerequisite — this project has no other
    * way to reach an authenticated Outlook Web session. Spawns it on first
    * use via npx and keeps the connection alive across token acquisitions
@@ -116,6 +150,8 @@ export class TokenManager {
    */
   private async ensureBrowserConnection(): Promise<Client> {
     if (this.client) return this.client;
+
+    this.clearStaleLock();
 
     const transport = new StdioClientTransport({
       command: 'npx',

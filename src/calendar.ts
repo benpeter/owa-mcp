@@ -268,6 +268,13 @@ export class CalendarClient {
    * Cancel an event via OWA's native CancelCalendarEvent service.svc action.
    * Sends cancellation notices to attendees for all scopes including thisAndFollowing.
    * EventScope: 0 = single, 1 = allInSeries, 2 = thisAndFollowing.
+   *
+   * service.svc returns ErrorItemNotFound for ~30% of events regardless of how
+   * the ImmutableId was obtained — a server-side issue, not a translateExchangeIds
+   * reliability problem (see docs/superpowers/plans/2026-04-02-service-svc-rsvp.md,
+   * which already tried and ruled out switching ID-resolution methods). Retrying
+   * the full translate+cancel sequence is the only mitigation that's actually
+   * been shown to help.
    */
   private async cancelEventViaSvc(
     eventId: string,
@@ -280,51 +287,69 @@ export class CalendarClient {
       thisAndFollowing: 2,
     };
 
-    const token = await this.tokens.getToken();
-    const svcEventId = await this.toServiceId(eventId, token.value);
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 2_000;
 
-    const payload = {
-      __type: 'CancelCalendarEventJsonRequest:#Exchange',
-      Header: {
-        __type: 'JsonRequestHeaders:#Exchange',
-        RequestServerVersion: 'V2018_01_08',
-        TimeZoneContext: {
-          __type: 'TimeZoneContext:#Exchange',
-          TimeZoneDefinition: {
-            __type: 'TimeZoneDefinitionType:#Exchange',
-            Id: 'W. Europe Standard Time',
+    let lastError: Error = new Error('cancelEventViaSvc: unreachable');
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const token = await this.tokens.getToken();
+        const svcEventId = await this.toServiceId(eventId, token.value);
+
+        const payload = {
+          __type: 'CancelCalendarEventJsonRequest:#Exchange',
+          Header: {
+            __type: 'JsonRequestHeaders:#Exchange',
+            RequestServerVersion: 'V2018_01_08',
+            TimeZoneContext: {
+              __type: 'TimeZoneContext:#Exchange',
+              TimeZoneDefinition: {
+                __type: 'TimeZoneDefinitionType:#Exchange',
+                Id: 'W. Europe Standard Time',
+              },
+            },
           },
-        },
-      },
-      Body: {
-        __type: 'CancelCalendarEventRequest:#Exchange',
-        EventId: { __type: 'ItemId:#Exchange', Id: svcEventId },
-        EventScope: scopeMap[scope],
-        ClientSupportsIrm: true,
-        Notes: {
-          __type: 'BodyContentType:#Exchange',
-          BodyType: 'HTML',
-          Value: comment ? `<div>${comment}</div>` : '<div><br></div>',
-        },
-      },
-    };
+          Body: {
+            __type: 'CancelCalendarEventRequest:#Exchange',
+            EventId: { __type: 'ItemId:#Exchange', Id: svcEventId },
+            EventScope: scopeMap[scope],
+            ClientSupportsIrm: true,
+            Notes: {
+              __type: 'BodyContentType:#Exchange',
+              BodyType: 'HTML',
+              Value: comment ? `<div>${comment}</div>` : '<div><br></div>',
+            },
+          },
+        };
 
-    const res = await fetch(`${OWA_SVC}?action=CancelCalendarEvent`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token.value}`,
-        'Content-Type': 'application/json; charset=utf-8',
-        action: 'CancelCalendarEvent',
-        'x-owa-urlpostdata': encodeURIComponent(JSON.stringify(payload)),
-        'x-req-source': 'Calendar',
-        Prefer: 'IdType="ImmutableId"',
-      },
-    });
+        const res = await fetch(`${OWA_SVC}?action=CancelCalendarEvent`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token.value}`,
+            'Content-Type': 'application/json; charset=utf-8',
+            action: 'CancelCalendarEvent',
+            'x-owa-urlpostdata': encodeURIComponent(JSON.stringify(payload)),
+            'x-req-source': 'Calendar',
+            Prefer: 'IdType="ImmutableId"',
+          },
+        });
 
-    const body = (await res.json()) as { Body: { ResponseCode: string; MessageText?: string } };
-    if (body.Body.ResponseCode !== 'NoError') {
-      throw new Error(`CancelCalendarEvent failed: ${body.Body.ResponseCode} — ${body.Body.MessageText ?? ''}`);
+        const body = (await res.json()) as { Body: { ResponseCode: string; MessageText?: string } };
+        if (body.Body.ResponseCode === 'NoError') {
+          return;
+        }
+        lastError = new Error(
+          `CancelCalendarEvent failed: ${body.Body.ResponseCode} — ${body.Body.MessageText ?? ''}`
+        );
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+      }
+
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * attempt));
+      }
     }
+    throw lastError;
   }
 
   /**
